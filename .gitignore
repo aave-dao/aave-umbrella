@@ -13,7 +13,7 @@ out/
 cspell.json
 
 # well, looks strange to ignore package-lock, but we have only prettier and it's temporary
-package-lock.json
+yarn.lock
 node_modules
 
 # ignore foundry deploy artifacts
