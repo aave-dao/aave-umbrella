@@ -15,7 +15,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: github.repository == 'aave-dao/aave-v3-origin'
+    if: github.repository == 'aave-dao/aave-umbrella'
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
