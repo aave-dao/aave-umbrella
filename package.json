@@ -1,5 +1,5 @@
 {
-  "name": "@bgd-labs/aave-umbrella",
+  "name": "@aave-dao/aave-umbrella",
   "version": "1.0.0",
   "scripts": {
     "lint": "prettier ./",
@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bgd-labs/aave-umbrella.git"
+    "url": "git+https://github.com/aave-dao/aave-umbrella.git"
   },
   "files": [
     "src"
@@ -22,9 +22,9 @@
   "author": "BGD Labs for Aave",
   "license": "BUSL1.1",
   "bugs": {
-    "url": "https://github.com/bgd-labs/aave-umbrella/issues"
+    "url": "https://github.com/aave-dao/aave-umbrella/issues"
   },
-  "homepage": "https://github.com/bgd-labs/aave-umbrella#readme",
+  "homepage": "https://github.com/aave-dao/aave-umbrella#readme",
   "devDependencies": {
     "@changesets/cli": "^2.28.1",
     "prettier": "2.8.7",
