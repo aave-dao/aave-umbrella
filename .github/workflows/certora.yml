@@ -4,6 +4,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+  id-token: write
+
 on:
   pull_request:
     branches:
@@ -29,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: Certora/certora-run-action@v1
+      - uses: Certora/certora-run-action@v2
         with:
           cli-version: 7.29.3
           configurations: |-
@@ -62,5 +68,6 @@ jobs:
           job-name: "Certora Prover Run"
           certora-key: ${{ secrets.CERTORAKEY }}
           install-java: true
+          cli-release: beta
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
