@@ -4,12 +4,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  statuses: write
-  pull-requests: write
-  id-token: write
-
 on:
   pull_request:
     branches:
@@ -31,6 +25,7 @@ jobs:
       contents: read
       statuses: write
       pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
