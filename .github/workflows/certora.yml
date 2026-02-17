@@ -63,6 +63,5 @@ jobs:
           job-name: "Certora Prover Run"
           certora-key: ${{ secrets.CERTORAKEY }}
           install-java: true
-          cli-release: beta
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
