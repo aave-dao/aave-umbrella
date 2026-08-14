@@ -1,4 +1,3 @@
-
 <table>
     <tr><th></th><th></th></tr>
     <tr>
@@ -27,10 +26,12 @@ The `RewardsController` is a smart contract to track and allow claiming of rewar
 This contract works alongside the Umbrella `StakeTokens` to provide rewards to their holders for securing Aave against bad debt. These rewards can be arbitrary erc-20 tokens, without unexpected functionality (ERC777, fee-on-transfer, and others).
 
 Previous review commit:
+
 - Link: https://github.com/bgd-labs/aave-umbrella-private/tree/main/src/contracts/rewards
 - Last commit: `de990c5c7b5c46d52eccab838dabc224adac8b8f`
 
 Latest review commit:
+
 - Link: https://github.com/aave-dao/aave-umbrella/tree/main/src/contracts/umbrella
 - Last commit: `62f3850816b257087e92f41a7f37a698f00fa96e`
 
@@ -39,6 +40,7 @@ Latest review commit:
 **StErMi**, is an independent smart contract security researcher. He serves as a Lead Security Researcher at Spearbit and has identified multiple bugs in the wild on Immunefi and on protocol's bounty programs like the Aave Bug Bounty.
 
 Do you want to connect with him?
+
 - [stermi.xyz website](https://stermi.xyz/)
 - [@StErMi on Twitter](https://twitter.com/StErMi)
 
@@ -65,7 +67,9 @@ At the end of the report you can find all the details relative to the validation
 **Severity** - the overall criticality of the risk
 
 ---
+
 # Findings Summary
+
 | ID     | Title                                                                                                         | Severity | Status          |
 | ------ | ------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
 | [I-01] | General informational issues                                                                                  | Info     | Fixed           |
@@ -78,6 +82,7 @@ At the end of the report you can find all the details relative to the validation
 | [I-08] | Consider early returning in `updateAsset` and `updateAssetAndUserData` when there's no supply                 | Info     | Fixed           |
 
 # [I-01] General informational issues
+
 ## Description
 
 ### Natspec typos, errors or improvements
@@ -99,15 +104,8 @@ At the end of the report you can find all the details relative to the validation
 ### Code improvement
 
 - [ ] [RewardsController.sol#L296-L312](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L296-L312) + [RewardsController.sol#L270-L294](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L270-L294): consider including in the return data of `getUserDataByAsset` and `getUserDataByReward` the `asset.lastUpdateTimestamp`. The currently returned information is not enough to let the caller know if the `accrued` rewards are up-to-date.
-- [ ] [RewardsController.sol#L84-L101](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L84-L101): consider refactoring and simplify the `configureAssetWithRewards` function. This function allows the caller to
-	- init asset without rewards
-	- init asset with rewards
-	- update asset `targetLiquidity` without rewards
-	- update asset `targetLiquidity` with rewards as parameters
-	- add new rewards to an existing asset
-	- update existing rewards of an existing asset
-	- ...
-The complexity of the logic could be simplified by splitting it into multiple smaller `external` functions that will follow the [KISS](https://en.wikipedia.org/wiki/KISS_principle) principles. This will make the code simpler to read and maintain, and more robust from both a security and role-based access point of view.
+- [ ] [RewardsController.sol#L84-L101](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L84-L101): consider refactoring and simplify the `configureAssetWithRewards` function. This function allows the caller to - init asset without rewards - init asset with rewards - update asset `targetLiquidity` without rewards - update asset `targetLiquidity` with rewards as parameters - add new rewards to an existing asset - update existing rewards of an existing asset - ...
+      The complexity of the logic could be simplified by splitting it into multiple smaller `external` functions that will follow the [KISS](https://en.wikipedia.org/wiki/KISS_principle) principles. This will make the code simpler to read and maintain, and more robust from both a security and role-based access point of view.
 
 ## Recommendations
 
@@ -121,6 +119,7 @@ BGD should fix all the suggestions listed in the above section
 The remaining recommendations have been implemented in the [PR 101](https://github.com/bgd-labs/aave-umbrella-private/pull/101)
 
 # [I-02] User could lose accrued reward depending on the balance and reward's index delta
+
 ## Context
 
 - [RewardsController.sol#L701-L705](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L701-L705)
@@ -129,19 +128,22 @@ The remaining recommendations have been implemented in the [PR 101](https://gith
 ## Description
 
 The amount of scaled reward accrued by the user depends on two factors:
+
 - the delta between the reward index and the user's index
 - the stake token balance of the user
 
 The amount of rewards accrued by the user that need to be accounted into `userData.accrued` is calculated as following
 
 ```solidity
-  function calculateAccrued(
-    uint152 newRewardIndex,
-    uint152 oldUserIndex,
-    uint256 userBalance
-  ) internal pure returns (uint112) {
-    return ((userBalance * (newRewardIndex - oldUserIndex)) / SCALING_FACTOR).toUint112();
-  }
+function calculateAccrued(
+  uint152 newRewardIndex,
+  uint152 oldUserIndex,
+  uint256 userBalance
+) internal pure returns (uint112) {
+  return
+    ((userBalance * (newRewardIndex - oldUserIndex)) / SCALING_FACTOR)
+      .toUint112();
+}
 ```
 
 if the user's balance or the reward's delta is small enough that `(userBalance * (newRewardIndex - oldUserIndex)) < SCALING_FACTOR`, the user will **lose** the accrued reward for that timeframe given that, no matter what the `newAccruedAmount` value is, the local user's index for the reward will be updated
@@ -154,22 +156,22 @@ if the user's balance or the reward's delta is small enough that `(userBalance *
 While this behavior could be valid when the user is the one that is actively triggering the `_updateUserData` (via `handleAction`), a malicious actor could trigger this worst-case scenario without the user consent via the permissionless function `updateAssetAndUserData`
 
 ```solidity
-
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import 'forge-std/Test.sol';
-import 'forge-std/console.sol';
-import {RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs} from './utils/RewardsControllerBase.t.sol';
-
+import "forge-std/Test.sol";
+import "forge-std/console.sol";
+import { RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs } from "./utils/RewardsControllerBase.t.sol";
 
 contract SRewardUserTest is RewardsControllerBaseTest {
-
   function setUp() public override {
     super.setUp();
 
-    _dealUnderlying(address(reward18Decimals), rewardsAdmin, 2 * 365 days * 1e12);
+    _dealUnderlying(
+      address(reward18Decimals),
+      rewardsAdmin,
+      2 * 365 days * 1e12
+    );
     _dealUnderlying(address(reward6Decimals), rewardsAdmin, 2 * 365 days * 1);
 
     vm.startPrank(rewardsAdmin);
@@ -191,29 +193,45 @@ contract SRewardUserTest is RewardsControllerBaseTest {
 
     // user stake 10k tokens
     _dealStakeToken(StakeToken(asset), user, 1000 * 1e18);
-    vm.warp(block.timestamp+1);
+    vm.warp(block.timestamp + 1);
 
-    uint256 rewardIndexBefore = rewardsController.calculateRewardIndex(asset, reward);
-    vm.warp(block.timestamp+1);
-    uint256 rewardIndexAfter = rewardsController.calculateRewardIndex(asset, reward);
+    uint256 rewardIndexBefore = rewardsController.calculateRewardIndex(
+      asset,
+      reward
+    );
+    vm.warp(block.timestamp + 1);
+    uint256 rewardIndexAfter = rewardsController.calculateRewardIndex(
+      asset,
+      reward
+    );
 
     // userBalance < SCALING_FACTOR / (newRewardIndex - oldUserIndex)
-    uint256 balanceToGainNoReward = 1e18 / (rewardIndexAfter - rewardIndexBefore);
+    uint256 balanceToGainNoReward = 1e18 /
+      (rewardIndexAfter - rewardIndexBefore);
     assertGt(balanceToGainNoReward, 0);
 
     // setup alice
-    address alice = makeAddr('alice');
+    address alice = makeAddr("alice");
     _dealStakeToken(StakeToken(asset), alice, balanceToGainNoReward);
 
-    vm.warp(block.timestamp+1);
-    uint256 accruedRewardScaled = rewardsController.calculateCurrentUserReward(asset, reward, alice);
+    vm.warp(block.timestamp + 1);
+    uint256 accruedRewardScaled = rewardsController.calculateCurrentUserReward(
+      asset,
+      reward,
+      alice
+    );
     assertEq(accruedRewardScaled, 0);
-
   }
 
-  function _setupAsset(address asset, address reward, uint256 maxEmission, uint256 targetLiquidity) internal {
+  function _setupAsset(
+    address asset,
+    address reward,
+    uint256 maxEmission,
+    uint256 targetLiquidity
+  ) internal {
     vm.startPrank(defaultAdmin);
-    IRewardsStructs.RewardSetupConfig[] memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
+    IRewardsStructs.RewardSetupConfig[]
+      memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
     rewards[0] = IRewardsStructs.RewardSetupConfig({
       reward: reward,
       rewardPayer: address(rewardsAdmin),
@@ -228,19 +246,20 @@ contract SRewardUserTest is RewardsControllerBaseTest {
     );
     vm.stopPrank();
   }
-
 }
 ```
 
 ## Recommendation
 
 BGD should:
+
 - document the above edge case scenario where the user could effectively lose the accrual of rewards when the user's balance and index delta is tiny
 - change the visibility of `updateAssetAndUserData` from `public` to `private` or restrict it to only the user or authed claimers (of the user)
 
 **StErMi:** The recommendations have been implemented in the [PR 96](https://github.com/bgd-labs/aave-umbrella-private/pull/96). The `updateAssetAndUserData` has been removed, and the edge case has been documented in the `README` file.
 
 # [I-03] `ClaimerSet` event should track the original caller
+
 ## Context
 
 - [RewardsDistributor.sol#L168-L172](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsDistributor.sol#L168-L172)
@@ -250,11 +269,11 @@ BGD should:
 The internal function `_setClaimer` can be triggered by the user's itself or anyone who has the `DEFAULT_ADMIN_ROLE` role
 
 ```solidity
-  function _setClaimer(address user, address claimer, bool flag) internal {
-    _getRewardsDistributorStorage().authorizedClaimers[user][claimer] = flag;
+function _setClaimer(address user, address claimer, bool flag) internal {
+  _getRewardsDistributorStorage().authorizedClaimers[user][claimer] = flag;
 
-    emit ClaimerSet(user, claimer, flag);
-  }
+  emit ClaimerSet(user, claimer, flag);
+}
 ```
 
 As shown above, the current implementation does only track the `user` address in the `ClaimerSet` event, while it could be beneficial to also track the `msg.sender` that could indeed be not the user itself.
@@ -301,12 +320,14 @@ BGD should update the natspec comment for the `MAX_EMISSION_VALUE_PER_SECOND` va
 **StErMi:** The natspec documentation has been updated in the [PR 98](https://github.com/bgd-labs/aave-umbrella-private/pull/98). BGD has decided to **not** update the value of the upper bound represented by the constant `MAX_EMISSION_VALUE_PER_SECOND`.
 
 # [I-06] `EmissionMath` dev comments should be rewritten to address inaccuracies and provide clearer assumptions
+
 ## Description
 
 The dev comments in the `calculateIndexIncrease` function of `EmissionMath` try to prove three points:
-1) `indexIncrease` cannot overflow `uint144`
-2) `indexIncrease` is always greater than zero even when `timeDelta == 1 second`
-3) `maxEmissionPerSecond * SCALING_FACTOR * totalAssets / targetLiquidity < 1` cannot round down to zero
+
+1. `indexIncrease` cannot overflow `uint144`
+2. `indexIncrease` is always greater than zero even when `timeDelta == 1 second`
+3. `maxEmissionPerSecond * SCALING_FACTOR * totalAssets / targetLiquidity < 1` cannot round down to zero
 
 The current comments contain multiple inaccuracies, and both the requirements (enforced by validations) and assumptions (written as comments) could be written in a much more clean and easier way to read.
 
@@ -344,26 +365,36 @@ It's true that in `StakeToken` the `_totalAssets` is a `uint192` type, but it's 
 When it happens, we have `(maxEmission - 0) * SCALING_FACTOR == maxEmission * SCALING_FACTOR` which is equal to `maxEmission`.
 
 ```solidity
-  function roundTermToZero(uint256 maxEmission, uint256 totalAssets, uint256 targetLiquidity) public {
-    targetLiquidity = bound(targetLiquidity, 1e18, 10_000_000e18);
-    uint256 precisionBound = (targetLiquidity * 1000) / 1e18;
-    uint256 minBound = precisionBound > 2 ? precisionBound : 2;
-    maxEmission = bound(targetLiquidity, minBound, 1000e18);
+function roundTermToZero(
+  uint256 maxEmission,
+  uint256 totalAssets,
+  uint256 targetLiquidity
+) public {
+  targetLiquidity = bound(targetLiquidity, 1e18, 10_000_000e18);
+  uint256 precisionBound = (targetLiquidity * 1000) / 1e18;
+  uint256 minBound = precisionBound > 2 ? precisionBound : 2;
+  maxEmission = bound(targetLiquidity, minBound, 1000e18);
 
-    uint256 targetLiquidityExcess = _percentMulDiv(targetLiquidity, FLAT_EMISSION_LIQUIDITY_BOUND);
+  uint256 targetLiquidityExcess = _percentMulDiv(
+    targetLiquidity,
+    FLAT_EMISSION_LIQUIDITY_BOUND
+  );
 
-    totalAssets = bound(totalAssets, targetLiquidity+1, targetLiquidityExcess-1);
+  totalAssets = bound(
+    totalAssets,
+    targetLiquidity + 1,
+    targetLiquidityExcess - 1
+  );
 
-    assertLe(totalAssets / targetLiquidity, 10);
+  assertLe(totalAssets / targetLiquidity, 10);
 
-    uint256 flatEmission = _percentMulDiv(maxEmission, FLAT_EMISSION_BPS);
-    uint256 term =
-      ((maxEmission - flatEmission) * (totalAssets - targetLiquidity))
-        /
-        (targetLiquidityExcess - targetLiquidity);
+  uint256 flatEmission = _percentMulDiv(maxEmission, FLAT_EMISSION_BPS);
+  uint256 term = ((maxEmission - flatEmission) *
+    (totalAssets - targetLiquidity)) /
+    (targetLiquidityExcess - targetLiquidity);
 
-    assertGt(term, 0);
-  }
+  assertGt(term, 0);
+}
 ```
 
 ### Inaccuracy 6
@@ -376,8 +407,8 @@ All the edge cases can be found in the in-depth discussion "[DISCUSSION] Roundin
 
 [EmissionMath.sol#L96](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/libraries/EmissionMath.sol#L96): `totalSupply` should be added to the list of "soft requirements" (written assumptions not enforced by any validation). Currently, we have the following assumptions:
 
-1) `totalAssets/targetLiquidity <= 10`: users are not encouraged to stake (at risk) funds for getting a fraction of rewards
-2) `totalSupply/totalAssets <= 1000`: this means that the ration of stakes/after-slash amount must at most be 1000 times. After that you will re-deploy the `StakeToken`
+1. `totalAssets/targetLiquidity <= 10`: users are not encouraged to stake (at risk) funds for getting a fraction of rewards
+2. `totalSupply/totalAssets <= 1000`: this means that the ration of stakes/after-slash amount must at most be 1000 times. After that you will re-deploy the `StakeToken`
 
 Because there's no "direct" correlation and assumptions between `targetLiquidity` and `totalSupply`, this allows to craft valid (respecting both existing requirements and assumptions) edge configurations to build a "valid" scenario where we can indeed bring the `indexIncrease` down to zero with a sequence of deposit+slash and still respect the above two assumptions.
 
@@ -390,6 +421,7 @@ BGD should consider addressing all the above listed inaccuracies and recommendat
 **BGD:** `EmissionMath` comments should be fixed here: [PR 102](https://github.com/bgd-labs/aave-umbrella-private/pull/102)
 
 # [I-07] `maxEmissionPerSecond` could be not accurate when distribution has ended but need to perform the last accrual
+
 ## Context
 
 - [RewardsController.sol#L382-L384](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L382-L384)
@@ -403,27 +435,29 @@ There is still an edge case to be configured, when the distribution, given `bloc
 Here's the `getRewardData` code as an example.
 
 ```solidity
-  /// @inheritdoc IRewardsController
-  function getRewardData(
-    address asset,
-    address reward
-  ) public view returns (RewardDataExternal memory) {
-    InternalStructs.RewardData memory rewardData = _getRewardsControllerStorage()
-      .assetsData[asset]
-      .data[reward]
-      .rewardData;
-    uint256 maxEmissionPerSecond = block.timestamp < rewardData.distributionEnd
-      ? rewardData.maxEmissionPerSecondScaled.scaleDown(rewardData.decimalsScaling)
-      : 0;
+/// @inheritdoc IRewardsController
+function getRewardData(
+  address asset,
+  address reward
+) public view returns (RewardDataExternal memory) {
+  InternalStructs.RewardData memory rewardData = _getRewardsControllerStorage()
+    .assetsData[asset]
+    .data[reward]
+    .rewardData;
+  uint256 maxEmissionPerSecond = block.timestamp < rewardData.distributionEnd
+    ? rewardData.maxEmissionPerSecondScaled.scaleDown(
+      rewardData.decimalsScaling
+    )
+    : 0;
 
-    return
-      RewardDataExternal({
-        addr: reward,
-        index: rewardData.index,
-        maxEmissionPerSecond: maxEmissionPerSecond,
-        distributionEnd: rewardData.distributionEnd
-      });
-  }
+  return
+    RewardDataExternal({
+      addr: reward,
+      index: rewardData.index,
+      maxEmissionPerSecond: maxEmissionPerSecond,
+      distributionEnd: rewardData.distributionEnd
+    });
+}
 ```
 
 Let's assume that we have an `(a1, r1)` distribution where:
@@ -440,17 +474,19 @@ This issue is present in both `getRewardData`, `getEmissionData` and `getAssetAn
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import 'forge-std/Test.sol';
-import 'forge-std/console.sol';
-import {RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs} from './utils/RewardsControllerBase.t.sol';
-
+import "forge-std/Test.sol";
+import "forge-std/console.sol";
+import { RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs } from "./utils/RewardsControllerBase.t.sol";
 
 contract SRewardUserTest is RewardsControllerBaseTest {
-
   function setUp() public override {
     super.setUp();
 
-    _dealUnderlying(address(reward18Decimals), rewardsAdmin, 2 * 365 days * 1e12);
+    _dealUnderlying(
+      address(reward18Decimals),
+      rewardsAdmin,
+      2 * 365 days * 1e12
+    );
 
     vm.startPrank(rewardsAdmin);
     reward18Decimals.approve(address(rewardsController), 2 * 365 days * 1e12);
@@ -461,7 +497,8 @@ contract SRewardUserTest is RewardsControllerBaseTest {
     _dealStakeToken(stakeWith18Decimals, user, 10_000_000 * 1e18);
 
     vm.startPrank(defaultAdmin);
-    IRewardsStructs.RewardSetupConfig[] memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
+    IRewardsStructs.RewardSetupConfig[]
+      memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
     rewards[0] = IRewardsStructs.RewardSetupConfig({
       reward: address(reward18Decimals),
       rewardPayer: address(rewardsAdmin),
@@ -481,14 +518,24 @@ contract SRewardUserTest is RewardsControllerBaseTest {
     // apply the update writing data
     rewardsController.updateAsset(address(stakeWith18Decimals));
 
-    IRewardsStructs.RewardDataExternal memory rdeBefore = rewardsController.getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
-    uint userRewardsBefore = rewardsController.calculateCurrentUserReward(address(stakeWith18Decimals), address(reward18Decimals), user);
+    IRewardsStructs.RewardDataExternal memory rdeBefore = rewardsController
+      .getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
+    uint userRewardsBefore = rewardsController.calculateCurrentUserReward(
+      address(stakeWith18Decimals),
+      address(reward18Decimals),
+      user
+    );
     assertGt(userRewardsBefore, 0);
     assertGt(rdeBefore.maxEmissionPerSecond, 0);
 
-    vm.warp(block.timestamp+5);
-    IRewardsStructs.RewardDataExternal memory rdeAfter_1 = rewardsController.getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
-    uint userRewardsAfter = rewardsController.calculateCurrentUserReward(address(stakeWith18Decimals), address(reward18Decimals), user);
+    vm.warp(block.timestamp + 5);
+    IRewardsStructs.RewardDataExternal memory rdeAfter_1 = rewardsController
+      .getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
+    uint userRewardsAfter = rewardsController.calculateCurrentUserReward(
+      address(stakeWith18Decimals),
+      address(reward18Decimals),
+      user
+    );
 
     // this prove that user needs to still
     assertGt(userRewardsAfter, userRewardsBefore);
@@ -498,9 +545,9 @@ contract SRewardUserTest is RewardsControllerBaseTest {
     // the index has been updated and is greater than 5 seconds before because even if the distributon, relative to `block.timestamp`
     // was really ended, it still had to accrue some index (and rewards) relative to the asset `lastUpdateTimestamp`
     rewardsController.updateAsset(address(stakeWith18Decimals));
-    IRewardsStructs.RewardDataExternal memory rdeAfter_2 = rewardsController.getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
+    IRewardsStructs.RewardDataExternal memory rdeAfter_2 = rewardsController
+      .getRewardData(address(stakeWith18Decimals), address(reward18Decimals));
     assertGt(rdeAfter_2.index, rdeBefore.index);
-
   }
 }
 ```
@@ -515,6 +562,7 @@ Both the code and the natspec of `IRewardsController` for these functions should
 **StErMi:** BGD, in the [PR 97](https://github.com/bgd-labs/aave-umbrella-private/pull/97), has decided to acknowledge and document this behaviour without any changes in the smart contract logic.
 
 # [I-08] Consider early returning in `updateAsset` and `updateAssetAndUserData` when there's no supply
+
 ## Context
 
 - [RewardsController.sol#L159-L170](https://github.com/bgd-labs/aave-umbrella-private/blob/5ff579e22d9622d46164c806f8a348954b11baa6/src/contracts/rewards/RewardsController.sol#L159-L170)
@@ -522,9 +570,10 @@ Both the code and the natspec of `IRewardsController` for these functions should
 
 ## Description
 
-The  `updateAsset` and `updateAssetAndUserData` functions allow any external entity to update all the rewards distributions of an asset and the user's `index`.
+The `updateAsset` and `updateAssetAndUserData` functions allow any external entity to update all the rewards distributions of an asset and the user's `index`.
 
 When there's no supply for the `StakeToken` identified by `asset`, these functions will just perform a no-op (no distribution's index will be updated, nor the user's index for such distribution) that will emit "spammy" and useless events
+
 - the `LastTimestampUpdated` event will be emitted with `newTimestamp == block.timestamp`
 - the `RewardIndexUpdated` event will be emitted with `newIndex == 0`
 
@@ -545,10 +594,11 @@ I'm looking for edge cases that would prove that it's possible, even with the cu
 `uint256 indexIncrease = (currentEmission * timeDelta) / totalSupply;`
 
 To make it happen, the goal here is to find ways to:
+
 - decrease `currentEmission`
 - increase `totalSupply`
 
-to reach a point where  `currentEmission < totalSupply` and so the division will round down to `0`
+to reach a point where `currentEmission < totalSupply` and so the division will round down to `0`
 
 I think that we can start by saying that the `StakeToken` has already some `> 0` deposit to simplify things. On top of that we have the following assumptions (give the existing logic):
 
@@ -559,6 +609,7 @@ I think that we can start by saying that the `StakeToken` has already some `> 0`
 - `maxEmissionPerSecondScaled <= 1000e18` (but we don't care to increase it)
 - `maxEmissionPerSecondScaled >= 2 wei` when `targetLiquidity * 1000 / 1e18 <=2 `
 - otherwise `maxEmissionPerSecondScaled >= targetLiquidity * 1000 / 1e18`
+
 ## Case "flat emission": `totalAssets > targetLiquidityExcess` (120% of `targetLiquidity`)
 
 In this case, we know that `currentEmission == (maxEmissionPerSecondScaled * 80_00 / 100_00) * SCALING_FACTOR` so we need to reach a point where
@@ -566,10 +617,12 @@ In this case, we know that `currentEmission == (maxEmissionPerSecondScaled * 80_
 `(maxEmissionPerSecondScaled * 80_00 / 100_00) * SCALING_FACTOR < totalSupply`
 
 we know that
+
 - `totalAssets >= targetLiquidity * 120_00 / 100_00`
 - `totalSupply >= totalAssets`
 
 Let's assume our `StakeToken` is a `18 decimals` token.
+
 - Min value for `targetLiquidity`: `10 ** 18 == 1e18`
 - Min value for `maxEmissionPerSecondScaled`: `1e3 == 1000`
 - `totalAssets >= 1.2e18`
@@ -580,17 +633,20 @@ Assuming that at most `totalAssets/targetLiquidity = 10` (as stated in the dev c
 `indexIncrease = 800 * 1e18 / (1e18 * 10) = 80`
 
 In the case we can perform slashes, we can build a sequence of `deposit + slash` actions that will bring down the `indexIncrease` to **zero** but still respecting both the requirements
-1) deposit `10e18`
-2) slash `10e18`
-3) deposit `9.99e18`
+
+1. deposit `10e18`
+2. slash `10e18`
+3. deposit `9.99e18`
 
 at the end we will have
+
 - `totalAssets / targetLiquidity = 10`
 - `totalSupply / totalAssets = 999`
 - `totalAssets = 10e18`
 - `totalSupply = 9999.99999e18`
 
 `indexIncrease = 800 * 1e18 / 9999.99999e18 = 0`
+
 ## Case "linear decrease curve": `targetLiquidity < totalAssets < targetLiquidityExcess` (120% of `targetLiquidity`)
 
 In this case the `currentEmission` is provided by the formula
@@ -617,18 +673,22 @@ Given that we're tending towards `targetLiquidityExcess` we can approximate the 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import 'forge-std/Test.sol';
-import 'forge-std/console.sol';
-import {RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs} from './utils/RewardsControllerBase.t.sol';
-import {EmissionMath} from '../../src/contracts/rewards/libraries/EmissionMath.sol';
+import "forge-std/Test.sol";
+import "forge-std/console.sol";
+import { RewardsControllerBaseTest, StakeToken, IRewardsDistributor, IRewardsStructs } from "./utils/RewardsControllerBase.t.sol";
+import { EmissionMath } from "../../src/contracts/rewards/libraries/EmissionMath.sol";
 
 contract SCheckEmissionMathTest is RewardsControllerBaseTest {
-  address alice = makeAddr('alice');
+  address alice = makeAddr("alice");
 
   function setUp() public override {
     super.setUp();
 
-    _dealUnderlying(address(reward18Decimals), rewardsAdmin, 2 * 365 days * 1e12);
+    _dealUnderlying(
+      address(reward18Decimals),
+      rewardsAdmin,
+      2 * 365 days * 1e12
+    );
     _dealUnderlying(address(reward6Decimals), rewardsAdmin, 2 * 365 days * 1);
 
     vm.startPrank(rewardsAdmin);
@@ -657,7 +717,10 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     _dealStakeToken(StakeToken(asset), alice, maxDeposit);
 
     assertLe(StakeToken(asset).totalAssets() / targetLiquidity, 10);
-    assertLe(StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(), 1000);
+    assertLe(
+      StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(),
+      1000
+    );
 
     uint256 indexBefore = rewardsController.calculateRewardIndex(asset, reward);
 
@@ -689,7 +752,10 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     _dealStakeToken(StakeToken(asset), alice, maxDeposit);
 
     assertLe(StakeToken(asset).totalAssets() / targetLiquidity, 10);
-    assertLe(StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(), 1000);
+    assertLe(
+      StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(),
+      1000
+    );
 
     vm.warp(block.timestamp + 1);
     rewardsController.updateAsset(asset);
@@ -727,7 +793,9 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
         break;
       }
 
-      if (StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets() > 1000) {
+      if (
+        StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets() > 1000
+      ) {
         // revert back to pre-slash to have a "valid" assets/supply ratio
         // I could probably calculate the exact value to be slashed to respect the invariant
         // and keep iterating even more, but this is already enough
@@ -737,7 +805,10 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     }
 
     assertLe(StakeToken(asset).totalAssets() / targetLiquidity, 10);
-    assertLe(StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(), 1000);
+    assertLe(
+      StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(),
+      1000
+    );
 
     uint256 indexBefore = rewardsController.calculateRewardIndex(asset, reward);
 
@@ -769,7 +840,10 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     _dealStakeToken(StakeToken(asset), alice, maxDeposit);
 
     assertLe(StakeToken(asset).totalAssets() / targetLiquidity, 10);
-    assertLe(StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(), 1000);
+    assertLe(
+      StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(),
+      1000
+    );
 
     vm.warp(block.timestamp + 1);
     rewardsController.updateAsset(asset);
@@ -792,7 +866,8 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     uint256 snapshotId;
     while (true) {
       // after the deposit we need to respect `
-      uint256 maxDeposit = (10 * targetLiquidity) - StakeToken(asset).totalAssets();
+      uint256 maxDeposit = (10 * targetLiquidity) -
+        StakeToken(asset).totalAssets();
 
       // deposit
       _dealStakeToken(StakeToken(asset), alice, maxDeposit);
@@ -806,19 +881,22 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
         break;
       }
 
-
-      if (StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets() > 1000) {
+      if (
+        StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets() > 1000
+      ) {
         // revert back to pre-slash to have a "valid" assets/supply ratio
         // I could probably calculate the exact value to be slashed to respect the invariant
         // and keep iterating even more, but this is already enough
         vm.revertTo(snapshotId);
         break;
       }
-
     }
 
     assertLe(StakeToken(asset).totalAssets() / targetLiquidity, 10);
-    assertLe(StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(), 1000);
+    assertLe(
+      StakeToken(asset).totalSupply() / StakeToken(asset).totalAssets(),
+      1000
+    );
 
     uint256 indexBefore = rewardsController.calculateRewardIndex(asset, reward);
 
@@ -855,7 +933,8 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
     uint256 targetLiquidity
   ) internal {
     vm.startPrank(defaultAdmin);
-    IRewardsStructs.RewardSetupConfig[] memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
+    IRewardsStructs.RewardSetupConfig[]
+      memory rewards = new IRewardsStructs.RewardSetupConfig[](1);
     rewards[0] = IRewardsStructs.RewardSetupConfig({
       reward: reward,
       rewardPayer: address(rewardsAdmin),
@@ -863,7 +942,11 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
       distributionEnd: (block.timestamp + 365 days)
     });
 
-    rewardsController.configureAssetWithRewards(asset, targetLiquidity, rewards);
+    rewardsController.configureAssetWithRewards(
+      asset,
+      targetLiquidity,
+      rewards
+    );
     vm.stopPrank();
   }
 }
@@ -872,6 +955,7 @@ contract SCheckEmissionMathTest is RewardsControllerBaseTest {
 # Validation of the commit `62f3850` AAVE DAO Umbrella repository
 
 Note: the following folders and files where considered out of scope of the review:
+
 - `src/contracts/helpers/DataAggregationHelper.sol`
 - `src/contracts/automation/*`
 - `src/contracts/payloads/*`
@@ -880,6 +964,7 @@ Note: the following folders and files where considered out of scope of the revie
 Below you can find the differences between the last commit [5b987d2](https://github.com/bgd-labs/aave-umbrella-private/commit/5b987d222355a1a8fa4b475e7f31968f66dd2394) reviewed and the requested commit to be reviewed [`62f3850`](https://github.com/aave-dao/aave-umbrella/tree/62f3850816b257087e92f41a7f37a698f00fa96e) on the final [AAVE DAO Umbrella Repo](https://github.com/aave-dao/aave-umbrella).
 
 The review confirms that these are the only differences, in the in-scope contracts, that have been applied compared to the code already reviewed from the last Security Review reported.
+
 ```diff
 --- bgd-labs/aave-umbrella-private/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:51:08
 +++ aave-dao/aave-umbrella/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:50:59

@@ -6,13 +6,14 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 import {UmbrellaBaseTest} from './utils/UmbrellaBase.t.sol';
 
 import {IUmbrellaConfiguration} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationV3} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV3.sol';
 import {Umbrella, IPool} from '../../src/contracts/umbrella/Umbrella.sol';
 
 import {MockOracle} from './utils/mocks/MockOracle.sol';
 
 contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_getStakeTokenData() public {
-    IUmbrellaConfiguration.StakeTokenData memory stakeData = umbrella.getStakeTokenData(
+    IUmbrellaConfigurationV3.StakeTokenData memory stakeData = umbrella.getStakeTokenData(
       address(stakeWith6Decimals)
     );
 
@@ -21,10 +22,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     address oracle = _setUpOracles(address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -39,10 +40,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     assertEq(stakeData.underlyingOracle, oracle);
     assertEq(stakeData.reserve, address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfigRemoval[]
-      memory stakeRemoval = new IUmbrellaConfiguration.SlashingConfigRemoval[](1);
+    IUmbrellaConfigurationV3.SlashingConfigRemoval[]
+      memory stakeRemoval = new IUmbrellaConfigurationV3.SlashingConfigRemoval[](1);
 
-    stakeRemoval[0] = IUmbrellaConfiguration.SlashingConfigRemoval({
+    stakeRemoval[0] = IUmbrellaConfigurationV3.SlashingConfigRemoval({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals)
     });
@@ -58,16 +59,16 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_updateSlashingConfigsOkSetup() public {
     address oracle = _setUpOracles(address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](2);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](2);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
       umbrellaStakeUnderlyingOracle: oracle
     });
-    stakeSetups[1] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[1] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying18Decimals),
       umbrellaStake: address(stakeWith18Decimals),
       liquidationFee: 0,
@@ -118,10 +119,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     pool.addReserveDeficit(address(underlying6Decimals), 1000 * 1e6);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -140,10 +141,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_updateSlashingConfigsInvalidStake() public {
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(unusedStake),
       liquidationFee: 0,
@@ -156,10 +157,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_updateSlashingConfigsLBGreaterThan100() public {
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 1e4 + 1,
@@ -172,10 +173,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_updateSlashingConfigsDifferentDecimals() public {
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith18Decimals),
       liquidationFee: 0,
@@ -194,10 +195,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(0),
       umbrellaStake: address(stakeWith18Decimals),
       liquidationFee: 0,
@@ -207,7 +208,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(0),
       liquidationFee: 0,
@@ -217,7 +218,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith18Decimals),
       liquidationFee: 0,
@@ -233,10 +234,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -248,14 +249,14 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     pool.switchReserve();
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
       umbrellaStakeUnderlyingOracle: oracle
     });
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidReserve.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV3.InvalidReserve.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
   }
 
@@ -264,16 +265,16 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     pool.addReserveDeficit(address(underlying6Decimals), 1000 * 1e6);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](2);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](2);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
       umbrellaStakeUnderlyingOracle: oracle
     });
-    stakeSetups[1] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[1] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying18Decimals),
       umbrellaStake: address(stakeWith18Decimals),
       liquidationFee: 0,
@@ -284,15 +285,15 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    IUmbrellaConfiguration.SlashingConfigRemoval[]
-      memory removalPairs = new IUmbrellaConfiguration.SlashingConfigRemoval[](2);
+    IUmbrellaConfigurationV3.SlashingConfigRemoval[]
+      memory removalPairs = new IUmbrellaConfigurationV3.SlashingConfigRemoval[](2);
 
-    removalPairs[0] = IUmbrellaConfiguration.SlashingConfigRemoval({
+    removalPairs[0] = IUmbrellaConfigurationV3.SlashingConfigRemoval({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals)
     });
 
-    removalPairs[1] = IUmbrellaConfiguration.SlashingConfigRemoval({
+    removalPairs[1] = IUmbrellaConfigurationV3.SlashingConfigRemoval({
       reserve: address(underlying18Decimals),
       umbrellaStake: address(stakeWith18Decimals)
     });
@@ -332,15 +333,15 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    IUmbrellaConfiguration.SlashingConfigRemoval[]
-      memory removalPairs = new IUmbrellaConfiguration.SlashingConfigRemoval[](2);
+    IUmbrellaConfigurationV3.SlashingConfigRemoval[]
+      memory removalPairs = new IUmbrellaConfigurationV3.SlashingConfigRemoval[](2);
 
-    removalPairs[0] = IUmbrellaConfiguration.SlashingConfigRemoval({
+    removalPairs[0] = IUmbrellaConfigurationV3.SlashingConfigRemoval({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals)
     });
 
-    removalPairs[1] = IUmbrellaConfiguration.SlashingConfigRemoval({
+    removalPairs[1] = IUmbrellaConfigurationV3.SlashingConfigRemoval({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals)
     });
@@ -359,10 +360,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_latestUnderlyingAnswer() public {
     MockOracle oracle = new MockOracle(1 * 1e8);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -396,10 +397,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     assertEq(isSlashable, false);
     assertEq(newDeficit, 1000 * 1e6);
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -534,8 +535,8 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_InvalidRoles() public {
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory configs = new IUmbrellaConfiguration.SlashingConfigUpdate[](0);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory configs = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](0);
 
     vm.expectRevert(
       abi.encodeWithSelector(
@@ -546,8 +547,8 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     );
     umbrella.updateSlashingConfigs(configs);
 
-    IUmbrellaConfiguration.SlashingConfigRemoval[]
-      memory removalConfigs = new IUmbrellaConfiguration.SlashingConfigRemoval[](0);
+    IUmbrellaConfigurationV3.SlashingConfigRemoval[]
+      memory removalConfigs = new IUmbrellaConfigurationV3.SlashingConfigRemoval[](0);
 
     vm.expectRevert(
       abi.encodeWithSelector(
@@ -562,10 +563,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_updateSlashingConfigTwoTimes() public {
     address oracle = address(new MockOracle(1 * 1e8));
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](1);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](1);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -595,7 +596,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     address newOracle = address(new MockOracle(1.1 * 1e8));
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 10,
@@ -626,16 +627,16 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_updateSlashingConfigsMultipleSetupOfOneStakeToken() public {
     address oracle = address(new MockOracle(1 * 1e8));
 
-    IUmbrellaConfiguration.SlashingConfigUpdate[]
-      memory stakeSetups = new IUmbrellaConfiguration.SlashingConfigUpdate[](2);
+    IUmbrellaConfigurationV3.SlashingConfigUpdate[]
+      memory stakeSetups = new IUmbrellaConfigurationV3.SlashingConfigUpdate[](2);
 
-    stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[0] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(underlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
       umbrellaStakeUnderlyingOracle: oracle
     });
-    stakeSetups[1] = IUmbrellaConfiguration.SlashingConfigUpdate({
+    stakeSetups[1] = IUmbrellaConfigurationV3.SlashingConfigUpdate({
       reserve: address(anotherUnderlying6Decimals),
       umbrellaStake: address(stakeWith6Decimals),
       liquidationFee: 0,
@@ -646,7 +647,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     vm.expectRevert(
       abi.encodeWithSelector(
-        IUmbrellaConfiguration.UmbrellaStakeAlreadySetForAnotherReserve.selector
+        IUmbrellaConfigurationV3.UmbrellaStakeAlreadySetForAnotherReserve.selector
       )
     );
     umbrella.updateSlashingConfigs(stakeSetups);

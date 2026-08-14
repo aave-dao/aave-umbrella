@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfiguration as ICStructs} from '../IUmbrellaEngineStructs.sol';
+import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfigurationV3 as ICStructs} from '../IUmbrellaEngineStructs.sol';
 import {IUmbrellaEngineStructs as IStructs, IRewardsStructs as IRStructs} from '../IUmbrellaEngineStructs.sol';
 
 import {EngineFlags} from '../EngineFlags.sol';
 
-import {IUmbrella} from '../../umbrella/interfaces/IUmbrella.sol';
+import {IUmbrellaV3} from '../../umbrella/interfaces/IUmbrellaV3.sol';
 import {IRewardsController} from '../../rewards/interfaces/IRewardsController.sol';
 
 library EngineUtils {
@@ -87,7 +87,7 @@ library EngineUtils {
 
     for (uint256 i; i < configs.length; ++i) {
       if (configs[i].deficitOffsetIncrease != 0) {
-        uint256 currentDeficitOffset = IUmbrella(umbrella).getDeficitOffset(configs[i].reserve);
+        uint256 currentDeficitOffset = IUmbrellaV3(umbrella).getDeficitOffset(configs[i].reserve);
 
         deficitOffsetIncreaseConfigs[deficitOffsetIncreaseArrayLength++] = IStructs
           .SetDeficitOffset({
@@ -148,7 +148,7 @@ library EngineUtils {
     address umbrellaStake,
     address umbrella
   ) internal view returns (ICStructs.SlashingConfigRemoval memory) {
-    ICStructs.StakeTokenData memory data = IUmbrella(umbrella).getStakeTokenData(umbrellaStake);
+    ICStructs.StakeTokenData memory data = IUmbrellaV3(umbrella).getStakeTokenData(umbrellaStake);
 
     return ICStructs.SlashingConfigRemoval({reserve: data.reserve, umbrellaStake: umbrellaStake});
   }

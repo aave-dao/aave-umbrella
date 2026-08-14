@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import {IPool} from 'aave-v3-origin/contracts/interfaces/IPool.sol';
-
 import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {EnumerableSet} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol';
 
@@ -10,7 +8,7 @@ import {ITransparentProxyFactory} from 'solidity-utils/contracts/transparent-pro
 
 import {IUmbrellaStkManager} from './interfaces/IUmbrellaStkManager.sol';
 
-import {UmbrellaConfiguration} from './UmbrellaConfiguration.sol';
+import {UmbrellaBase} from './UmbrellaBase.sol';
 
 import {UmbrellaStakeToken} from '../stakeToken/UmbrellaStakeToken.sol';
 
@@ -18,9 +16,10 @@ import {UmbrellaStakeToken} from '../stakeToken/UmbrellaStakeToken.sol';
  * @title UmbrellaStkManager
  * @notice An abstract contract for creating and managing `UmbrellaStakeToken`s, including changing `cooldown` and `unstakeWindow` parameters,
  * pausing or unpausing token and rescuing funds.
+ * @dev Version agnostic, it is shared by every `Umbrella` version.
  * @author BGD labs
  */
-abstract contract UmbrellaStkManager is UmbrellaConfiguration, IUmbrellaStkManager {
+abstract contract UmbrellaStkManager is UmbrellaBase, IUmbrellaStkManager {
   using EnumerableSet for EnumerableSet.AddressSet;
 
   /// @custom:storage-location erc7201:umbrella.storage.UmbrellaStkManager
@@ -50,22 +49,6 @@ abstract contract UmbrellaStkManager is UmbrellaConfiguration, IUmbrellaStkManag
   }
 
   function __UmbrellaStkManager_init(
-    IPool pool,
-    address superAdmin,
-    address slashedFundsRecipient,
-    address umbrellaStakeTokenImpl,
-    address transparentProxyFactory
-  ) internal onlyInitializing {
-    __UmbrellaConfiguration_init(pool, superAdmin, slashedFundsRecipient);
-
-    __UmbrellaStkManager_init_unchained(
-      superAdmin,
-      umbrellaStakeTokenImpl,
-      transparentProxyFactory
-    );
-  }
-
-  function __UmbrellaStkManager_init_unchained(
     address superAdmin,
     address umbrellaStakeTokenImpl,
     address transparentProxyFactory

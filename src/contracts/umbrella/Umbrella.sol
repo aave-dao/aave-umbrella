@@ -11,19 +11,20 @@ import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 import {Math} from 'openzeppelin-contracts/contracts/utils/math/Math.sol';
 import {SafeERC20} from 'openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {IUmbrella} from './interfaces/IUmbrella.sol';
+import {IUmbrellaV3} from './interfaces/IUmbrellaV3.sol';
 import {IUmbrellaStakeToken} from '../stakeToken/interfaces/IUmbrellaStakeToken.sol';
 
+import {UmbrellaConfiguration} from './UmbrellaConfiguration.sol';
 import {UmbrellaStkManager} from './UmbrellaStkManager.sol';
 
 /**
  * @title Umbrella
- * @notice This contract provides mechanisms for managing and resolving reserve deficits within the Aave protocol.
+ * @notice This contract provides mechanisms for managing and resolving reserve deficits within the Aave V3 protocol.
  * It facilitates deficit coverage through direct contributions and incorporates slashing functionality to address deficits by slashing umbrella stake tokens.
  * The contract supports only single-asset slashing in the current version.
  * @author BGD labs
  */
-contract Umbrella is UmbrellaStkManager, IUmbrella {
+contract Umbrella is UmbrellaConfiguration, UmbrellaStkManager, IUmbrellaV3 {
   using Math for uint256;
   using SafeERC20 for IERC20;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
@@ -39,16 +40,12 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     address umbrellaStakeTokenImpl,
     address transparentProxyFactory
   ) external virtual initializer {
-    __UmbrellaStkManager_init(
-      pool,
-      governance,
-      slashedFundsRecipient,
-      umbrellaStakeTokenImpl,
-      transparentProxyFactory
-    );
+    __UmbrellaBase_init(governance);
+    __UmbrellaConfiguration_init(pool, slashedFundsRecipient);
+    __UmbrellaStkManager_init(governance, umbrellaStakeTokenImpl, transparentProxyFactory);
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function setDeficitOffset(
     address reserve,
     uint256 newDeficitOffset
@@ -62,7 +59,7 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     _setDeficitOffset(reserve, newDeficitOffset);
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function coverDeficitOffset(
     address reserve,
     uint256 amount
@@ -90,7 +87,7 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     return amount;
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function coverPendingDeficit(
     address reserve,
     uint256 amount
@@ -105,7 +102,7 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     return amount;
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function coverReserveDeficit(
     address reserve,
     uint256 amount
@@ -124,7 +121,7 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     return amount;
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function slash(address reserve) external returns (uint256) {
     (bool isSlashable, uint256 newDeficit) = isReserveSlashable(reserve);
 
@@ -148,7 +145,7 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     return newCoveredAmount;
   }
 
-  /// @inheritdoc IUmbrella
+  /// @inheritdoc IUmbrellaV3
   function tokenForDeficitCoverage(address reserve) external view returns (address) {
     if (POOL().getConfiguration(reserve).getIsVirtualAccActive()) {
       return POOL().getReserveAToken(reserve);

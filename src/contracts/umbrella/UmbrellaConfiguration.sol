@@ -7,28 +7,20 @@ import {AggregatorInterface} from 'aave-v3-origin/contracts/dependencies/chainli
 
 import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
-import {Initializable} from 'openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol';
-import {AccessControlUpgradeable} from 'openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol';
-
-import {RescuableBase, IRescuableBase} from 'solidity-utils/contracts/utils/RescuableBase.sol';
-import {RescuableACL} from 'solidity-utils/contracts/utils/RescuableACL.sol';
-
 import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
 
 import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationV3} from './interfaces/IUmbrellaConfigurationV3.sol';
+
+import {UmbrellaBase} from './UmbrellaBase.sol';
 
 /**
  * @title UmbrellaConfiguration
- * @notice This abstract contract provides base configuration and access control. Configuration for covering `reserve`s,
+ * @notice This abstract contract provides base configuration for covering `reserve`s of an Aave V3 `Pool`,
  * including setting `UmbrellaStakeToken`s, `liquidationFee`s, `underlyingOracle`s for pricing, and tracking deficit.
  * @author BGD labs
  */
-abstract contract UmbrellaConfiguration is
-  RescuableACL,
-  Initializable,
-  AccessControlUpgradeable,
-  IUmbrellaConfiguration
-{
+abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV3 {
   using EnumerableMap for EnumerableMap.AddressToUintMap;
 
   struct ReserveData {
@@ -39,12 +31,6 @@ abstract contract UmbrellaConfiguration is
     /// @notice Deficit on top of `deficitOffset` (already slashed and waiting to be covered by Umbrella)
     uint256 pendingDeficit;
   }
-
-  bytes32 public constant COVERAGE_MANAGER_ROLE = keccak256('COVERAGE_MANAGER_ROLE');
-  bytes32 public constant RESCUE_GUARDIAN_ROLE = keccak256('RESCUE_GUARDIAN_ROLE');
-  bytes32 public constant PAUSE_GUARDIAN_ROLE = keccak256('PAUSE_GUARDIAN_ROLE');
-
-  uint256 internal constant ONE_HUNDRED_PERCENT = 1e4;
 
   /// @custom:storage-location erc7201:umbrella.storage.UmbrellaConfiguration
   struct UmbrellaConfigurationStorage {
@@ -76,23 +62,6 @@ abstract contract UmbrellaConfiguration is
 
   function __UmbrellaConfiguration_init(
     IPool pool,
-    address superAdmin,
-    address slashedFundsRecipient
-  ) internal onlyInitializing {
-    require(superAdmin != address(0), ZeroAddress());
-
-    __AccessControl_init();
-
-    _grantRole(DEFAULT_ADMIN_ROLE, superAdmin);
-    _grantRole(COVERAGE_MANAGER_ROLE, superAdmin);
-    _grantRole(RESCUE_GUARDIAN_ROLE, superAdmin);
-    _grantRole(PAUSE_GUARDIAN_ROLE, superAdmin);
-
-    __UmbrellaConfiguration_init_unchained(pool, slashedFundsRecipient);
-  }
-
-  function __UmbrellaConfiguration_init_unchained(
-    IPool pool,
     address slashedFundsRecipient
   ) internal onlyInitializing {
     require(address(pool) != address(0) && slashedFundsRecipient != address(0), ZeroAddress());
@@ -103,7 +72,7 @@ abstract contract UmbrellaConfiguration is
     $.pool = pool;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function updateSlashingConfigs(
     SlashingConfigUpdate[] calldata slashingConfigs
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -112,7 +81,7 @@ abstract contract UmbrellaConfiguration is
     }
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function removeSlashingConfigs(
     SlashingConfigRemoval[] calldata removalPairs
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -134,7 +103,7 @@ abstract contract UmbrellaConfiguration is
     }
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function getReserveSlashingConfig(
     address reserve,
     address umbrellaStake
@@ -151,7 +120,7 @@ abstract contract UmbrellaConfiguration is
       });
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function getStakeTokenData(address umbrellaStake) external view returns (StakeTokenData memory) {
     return _getUmbrellaConfigurationStorage().stakesData[umbrellaStake];
   }
@@ -166,7 +135,7 @@ abstract contract UmbrellaConfiguration is
     return AggregatorInterface(underlyingOracle).latestAnswer();
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function getReserveSlashingConfigs(
     address reserve
   ) public view returns (SlashingConfig[] memory) {
@@ -187,7 +156,7 @@ abstract contract UmbrellaConfiguration is
     return configs;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function isReserveSlashable(address reserve) public view returns (bool, uint256) {
     ReserveData storage reserveData = _getUmbrellaConfigurationStorage().reservesData[reserve];
 
@@ -203,17 +172,17 @@ abstract contract UmbrellaConfiguration is
     return (false, newDeficit);
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function getDeficitOffset(address reserve) public view returns (uint256) {
     return _getUmbrellaConfigurationStorage().reservesData[reserve].deficitOffset;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function getPendingDeficit(address reserve) public view returns (uint256) {
     return _getUmbrellaConfigurationStorage().reservesData[reserve].pendingDeficit;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function POOL_ADDRESSES_PROVIDER() public view returns (IPoolAddressesProvider) {
     return _getUmbrellaConfigurationStorage().poolAddressesProvider;
   }
@@ -223,15 +192,9 @@ abstract contract UmbrellaConfiguration is
     return _getUmbrellaConfigurationStorage().slashedFundsRecipient;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationV3
   function POOL() public view returns (IPool) {
     return _getUmbrellaConfigurationStorage().pool;
-  }
-
-  function maxRescue(
-    address
-  ) public pure override(IRescuableBase, RescuableBase) returns (uint256) {
-    return type(uint256).max;
   }
 
   function _updateSlashingConfig(SlashingConfigUpdate calldata slashConfig) internal {
@@ -308,10 +271,4 @@ abstract contract UmbrellaConfiguration is
 
     emit PendingDeficitChanged(reserve, newReserveDeficit);
   }
-
-  function _checkRescueGuardian() internal view override {
-    _checkRole(RESCUE_GUARDIAN_ROLE, _msgSender());
-  }
-
-  function _isUmbrellaStkToken(address stakeToken) internal view virtual returns (bool);
 }

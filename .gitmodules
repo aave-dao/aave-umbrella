@@ -6,5 +6,9 @@
 	url = https://github.com/a16z/erc4626-tests
 [submodule "lib/aave-v3-origin"]
 	path = lib/aave-v3-origin
-	url = https://github.com/bgd-labs/aave-v3-origin
+	url = https://github.com/aave-dao/aave-v3-origin
 	branch = v3.3.0
+[submodule "lib/aave-v4"]
+	path = lib/aave-v4
+	url = https://github.com/aave/aave-v4
+	branch = main

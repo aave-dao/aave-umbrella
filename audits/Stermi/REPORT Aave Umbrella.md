@@ -24,10 +24,12 @@ A smart contract security review can never verify the complete absence of vulner
 `Umbrella` is the core smart contract within the broader `Umbrella` project, enabling creation, configuration and slashing of `UmbrellaStakeTokens`, together with coverage of deficit in the associated Aave pool.
 
 Previous review commit:
+
 - Link: https://github.com/bgd-labs/aave-umbrella-private/tree/main/src/contracts/umbrella
 - Last commit: `5b987d222355a1a8fa4b475e7f31968f66dd2394`
 
 Latest review commit:
+
 - Link: https://github.com/aave-dao/aave-umbrella/tree/main/src/contracts/umbrella
 - Last commit: `62f3850816b257087e92f41a7f37a698f00fa96e`
 
@@ -36,6 +38,7 @@ Latest review commit:
 **StErMi**, is an independent smart contract security researcher. He serves as a Lead Security Researcher at Spearbit and has identified multiple bugs in the wild on Immunefi and on protocol's bounty programs like the Aave Bug Bounty.
 
 Do you want to connect with him?
+
 - [stermi.xyz website](https://stermi.xyz/)
 - [@StErMi on Twitter](https://twitter.com/StErMi)
 
@@ -43,6 +46,7 @@ Do you want to connect with him?
 
 **_review commit hash_ - [5ba619ea38a7ce09204a88319929478465621ea8](https://github.com/bgd-labs/aave-umbrella-private/tree/5ba619ea38a7ce09204a88319929478465621ea8)**
 BGD has provided three additional commits to be reviewed:
+
 - [commit diff e3dde13..de990c5](https://github.com/bgd-labs/aave-umbrella-private/compare/e3dde13..de990c5)
 
 # Post Review Update: validating commit `62f3850` AAVE DAO Umbrella repository
@@ -50,7 +54,6 @@ BGD has provided three additional commits to be reviewed:
 AAVE DAO has requested to review the differences between the last commit [5b987d2](https://github.com/bgd-labs/aave-umbrella-private/commit/5b987d222355a1a8fa4b475e7f31968f66dd2394) reviewed in the BGD Labs AAVE Umbrella repository and the commit [`62f3850`](https://github.com/aave-dao/aave-umbrella/commit/62f3850816b257087e92f41a7f37a698f00fa96e) from the AAVE DAO Umbrella repository that will be used as the official reference.
 
 At the end of the report you can find all the details relative to the validation of the differences and the confirmation that, apart from the mentioned differences the code is the same as the one that has been previously reviewed.
-
 
 # Severity classification
 
@@ -65,7 +68,9 @@ At the end of the report you can find all the details relative to the validation
 **Severity** - the overall criticality of the risk
 
 ---
+
 # Findings Summary
+
 | ID                 | Title                                                                                                                                                             | Severity | Status          |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
 | [H-01]             | `liquidationBonus` included in the `pendingDeficit` will break Umbrella logics after a slash event                                                                | High     | Fixed           |
@@ -91,6 +96,7 @@ At the end of the report you can find all the details relative to the validation
 The `liquidationBonus` is a mechanism used by Umbrella to over-slash the `stakeToken` holders to repay for additional costs, and **should not** be used to cover any deficit. The current implementation of `_slashAsset` is instead incorporating the whole `liquidationBonus` inside the `pendingDeficit`. This could easily end up breaking one core invariant of Umbrella: `pendingDeficit <= poolDeficit`.
 
 By breaking such invariant and over-accounting (compared to the actual deficit needed to cover by the slash) the slashed amount into `pendingDeficit` these main problems will arise:
+
 - some of the `Umbrella` core functions will revert because of underflow errors
 - some of the `Umbrella` logics will not work as expected
 - the DAO will not receive the deserved part of the slash to cover the fees, incurring in a loss
@@ -117,7 +123,7 @@ Anyone calls `slashReserveDeficit(USDC)` that will execute `_slashAsset(USDC, st
 
 With the above state, we have broken the core invariant `pendingDeficit <= reserveDeficit`. We can now look at all the parts of the code where the `pendingDeficit` is used to look for possible side effects:
 
-1) `UmbrellaConfiguration.updateSlashingConfigs`
+1. `UmbrellaConfiguration.updateSlashingConfigs`
 
 If the `DEFAULT_ADMIN_ROLE` role tries to remove the existing config and replace with a new one, the operation will revert for underflow when the following code is executed
 
@@ -134,7 +140,7 @@ if (reserveData.configurationMap.length() == 0) {
 
 `poolDeficit - pendingDeficit` will revert given that `poolDeficit = 600` but `pendingDeficit = 750`
 
-2) `Umbrella.setDeficitOffset`
+2. `Umbrella.setDeficitOffset`
 
 The `pendingDeficit` has been "inflated" and now the minimum `newDeficitOffset` that will satisfy the requirement
 
@@ -147,8 +153,7 @@ require(
 
 has been decreased by the `liquidationBonus` that has been included in the new `pendingDeficit` value. We can see this case not critical because at the end the `pendingDeficit` should be seen as an already slashed amount that will be used at some point to eliminate the deficit. We still need to consider that, because of the implementation of `_coverDeficit`, it won't correctly account the "surplus" of tokens sent to the `POOL` to eliminate the deficit (see detail on `coverPendingDeficit`)
 
-
-3) `Umbrella.coverDeficitOffset`
+3. `Umbrella.coverDeficitOffset`
 
 - `poolDeficit = 600 USDC`
 - `deficitOffset = 100 USDC`
@@ -156,7 +161,7 @@ has been decreased by the `liquidationBonus` that has been included in the new `
 
 The function will try to enter the `if (deficitOffset + pendingDeficit > poolDeficit)` but will revert when `poolDeficit - pendingDeficit` is calculated to execute `amount = _coverDeficit(reserve, amount, poolDeficit - pendingDeficit);`
 
-4) `Umbrella.coverDeficitOffset`
+4. `Umbrella.coverDeficitOffset`
 
 - `poolDeficit = 600 USDC`
 - `deficitOffset = 100 USDC`
@@ -188,8 +193,8 @@ without letting the caller known which was the actual amount used to cover the d
 
 BGD should:
 
-1) Fix the behavior `_slashAsset`: it's correct to slash the `stakeToken` for the needed amount plus the configured `liquidationBonus` but the `liquidationBonus` must **not** be accounted in the final value that will be added to the existing `pendingDeficit`
-2) Create unit and fuzzing tests around the core invariants to ensure that they are always held
+1. Fix the behavior `_slashAsset`: it's correct to slash the `stakeToken` for the needed amount plus the configured `liquidationBonus` but the `liquidationBonus` must **not** be accounted in the final value that will be added to the existing `pendingDeficit`
+2. Create unit and fuzzing tests around the core invariants to ensure that they are always held
 
 **StErMi:** The recommendations have been implemented in the [commit `946a220`](https://github.com/bgd-labs/aave-umbrella-private/commit/946a220a57b4ae0ad11d088335f9bcbb0e34dcef)
 
@@ -208,12 +213,14 @@ The current `Pool.eliminateReserveDeficit` implementation will eliminate up-to t
 ## Recommendations
 
 BGD should consider performing the following changes:
-1) `Pool.eliminateReserveDeficit` should return the actual deficit eliminated from the reserve
-2) `_coverDeficit` should return the amount of deficit eliminated by `Pool.eliminateReserveDeficit`
+
+1. `Pool.eliminateReserveDeficit` should return the actual deficit eliminated from the reserve
+2. `_coverDeficit` should return the amount of deficit eliminated by `Pool.eliminateReserveDeficit`
 
 **BGD:** We agree with this issue and we will definitely fix it in the future as it should simplify some code, so we don't want to set acknowledged status for this issue. So, "freeze" until v3.4.0 is optimal solution I think.
 
 # [L-02] `Umbrella` should revert when it interacts with a not-whitelisted `stakeToken`
+
 ## Context
 
 - [UmbrellaStkManager.sol#L104-L106](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaStkManager.sol#L104-L106)
@@ -230,6 +237,7 @@ The Umbrella system is responsible to creating, configure, and deploying all the
 Only the `stakeToken`s deployed via the `createStakeTokens` function via `Umbrella` can be used as inputs of the `updateSlashingConfigs` function; otherwise they would revert when `require(_isUmbrellaStkToken(slashConfig.umbrellaStake), InvalidStakeToken());` sanity check is executed.
 
 For such reason, the same sanity check should be applied to every `stakeToken` passed as a parameter of the following functions offered by the `UmbrellaStkManager` contract:
+
 - `setCooldownStk`
 - `setUnstakeWindowStk`
 - `emergencyTokenTransferStk`
@@ -253,6 +261,7 @@ BGD should revert the execution of the above functions if the `stakeToken` passe
 ## Description
 
 The `_updateSlashingConfig` function executed to create or update a `(reserve, stakeToken)` slashing configuration should perform these additional sanity checks:
+
 - The function should revert if the `slashConfig.reserve` token is not a valid or active `reserve` in the AAVE `$.pool`
 - The function should revert if the `slashConfig.umbrellaStakeUnderlyingOracle` has not been properly configured or return an invalid price
 
@@ -274,12 +283,14 @@ Note: the current sanity check for the `reserve` checks that the `reserve` exist
 Using a "common" `mapping` stakeToken → stakeTokenUnderlyingOracle that is not bound to the `reserve` will create problems when the `(reserve, stakeToken)` config is updated and when the `(reserve, stakeToken)` config is removed.
 
 Scenario 1) overriding the oracle:
+
 - Call `umbrella.updateSlashingConfigs` to setup the `(reserve1, stakeToken1)` config with oracle `oracle1`
 - Call `umbrella.updateSlashingConfigs` to setup the `(reserve2, stakeToken1)` config with oracle `oracle2`
 
 If we now call `umbrella.getReserveSlashingConfig(reserve1, stakeToken1)` the `umbrellaStakeUnderlyingOracle` is `oracle2` instead of `oracle1`
 
 Scenario 2) Removing a configuration will "reset" the oracle of the other one:
+
 - Call `umbrella.updateSlashingConfigs` to setup the `(reserve1, stakeToken1)` config with oracle `oracle1`
 - Call `umbrella.updateSlashingConfigs` to setup the `(reserve2, stakeToken1)` config with oracle `oracle1`
 - Call `umbrella.removeSlashingConfigs` to remove the `(reserve1, stakeToken1)` config
@@ -302,8 +313,8 @@ The only viable solution, without modifying the `UmbrellaStakeToken.latestAnswer
 
 - [x] [README.md?plain=1#L14](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/README.md?plain=1#L14): the documentation relative to the "Deficit Offset" should be rewritten. The second part, relative to a practical example, it states the opposite of the explanation written in the first part.
 - [x] [README.md?plain=1#L61](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/README.md?plain=1#L61): The "to Umbrella contracts" part relative to the `RESCUE_GUARDIAN_ROLE` role explanation should be more detailed. The `RESCUE_GUARDIAN_ROLE` can rescue `ERC20` tokens and the "native" blockchain token sent directly to
-	- The `Umbrella` contract itself
-	- All the `StakeToken` to which the `Umbrella` contract is the owner of (`stakeToken.owner() == UMBRELLA`). Relative to this, the documentation should be even more specific (see issue "`Umbrella` should revert when it interacts with a not-whitelisted `stakeToken`"), specifying that the `stakeToken` will be a token deployed through the `UmbrellaStkManager` factory.
+  - The `Umbrella` contract itself
+  - All the `StakeToken` to which the `Umbrella` contract is the owner of (`stakeToken.owner() == UMBRELLA`). Relative to this, the documentation should be even more specific (see issue "`Umbrella` should revert when it interacts with a not-whitelisted `stakeToken`"), specifying that the `stakeToken` will be a token deployed through the `UmbrellaStkManager` factory.
 - [x] [README.md?plain=1#L153](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/README.md?plain=1#L153): the correct name of the `slashAsset()` internal function is `_slashAsset(...)`
 - [x] [README.md?plain=1#L153-L159](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/README.md?plain=1#L153-L159): the documentation of the `slashAsset()` should be re-written, specifying the behavior relative to the `liquidationBonus` concept. There are scenarios where, even if the `StakeContract` could fill the whole `deficitToCover`, because of the `liquidationBonus` less deficit will be covered.
 - [ ] BGD should explain the concept and behavior of `liquidationBonus` in a separate section, providing practical example to cover all the possible scenarios.
@@ -317,9 +328,9 @@ The only viable solution, without modifying the `UmbrellaStakeToken.latestAnswer
 ### Code improvement
 
 - [x] Consider emitting specific events when the following functions are executed
-	- [x] `coverDeficitOffset`
-	- [x] `coverPendingDeficit`
-	- [x] `slashReserveDeficit`. In this case, consider tracking also the "premium" (given by the `liquidationBonus`) removed from the slashed amount that is not going to "directly" cover the pending deficit
+  - [x] `coverDeficitOffset`
+  - [x] `coverPendingDeficit`
+  - [x] `slashReserveDeficit`. In this case, consider tracking also the "premium" (given by the `liquidationBonus`) removed from the slashed amount that is not going to "directly" cover the pending deficit
 - [x] [Umbrella.sol#L174-L177](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/Umbrella.sol#L174-L177): If the common scenario will be to have `liquidationBonus == 0` (see `README`), consider skipping the calculation made in `_slashAsset`
 - [x] [UmbrellaConfiguration.sol#L123-L124](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaConfiguration.sol#L123-L124): `map.remove(removalPairs[i].umbrellaStake)` returns `true` if it was able to remove the record with the key `removalPairs[i].umbrellaStake`. The `removeSlashingConfigs` could be refactored in the following way
 
@@ -333,6 +344,7 @@ The only viable solution, without modifying the `UmbrellaStakeToken.latestAnswer
 	emit SlashingConfigurationRemoved(removalPairs[i].reserve, removalPairs[i].umbrellaStake);
 }
 ```
+
 - [x] [UmbrellaConfiguration.sol#L144](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaConfiguration.sol#L144): consider using the `map.tryGet` flavor of the getter when `$.reservesData[reserve].configurationMap.get(umbrellaStake)` is executed in `getReserveSlashingConfig`. If the record does not exist, revert with a "custom" and more meaningful error
 - [x] [UmbrellaConfiguration.sol#L148-L153](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaConfiguration.sol#L148-L153): consider checking the existence of the `stakeToken` oracle and revering with a "custom" and more meaningful error when `latestUnderlyingAnswer` is executed
 - [x] [UmbrellaConfiguration.sol#L248](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaConfiguration.sol#L248): `_updateSlashingConfig` can directly use `reserveData.pendingDeficit` instead of re-fetching it via calling `getPendingDeficit(...)`
@@ -348,6 +360,7 @@ BGD should fix all the suggestions listed in the above section
 The remaining recommendations have been implemented in the [PR 111](https://github.com/bgd-labs/aave-umbrella-private/pull/111) and [PR 113](https://github.com/bgd-labs/aave-umbrella-private/pull/113)
 
 # [I-02] The same `stakeToken` can be configured to cover deficits of multiple `reserve`
+
 ## Context
 
 - [UmbrellaConfiguration.sol#L110](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/umbrella/UmbrellaConfiguration.sol#L110)
@@ -366,6 +379,7 @@ Note: if BGD will pursue the recommendation described in the issue "Using a "com
 **StErMi:** The recommendations have been implemented in the [PR 112](https://github.com/bgd-labs/aave-umbrella-private/pull/112)
 
 # [I-03] Consider aligning the oracle getters function to the current Chainlink
+
 ## Context
 
 - [IOracleToken.sol#L11](https://github.com/bgd-labs/aave-umbrella-private/blob/5ba619ea38a7ce09204a88319929478465621ea8/src/contracts/stakeToken/interfaces/IOracleToken.sol#L11)
@@ -388,11 +402,13 @@ BGD should consider replacing in the whole Umbrella, `StataToken` and `StakeToke
 So the final status is acknowledged.
 
 # [I-04] Considerations relative to the risk exposure of the `stakeToken` stakers compared to their reward
+
 ## Description
 
 Stakers of the `stakeToken`, stakes for rewards that are bound to the amount of token staked (and time locked for an amount of time before being able to be withdrawn).
 
 At any point in time, the `DEFAULT_ADMIN_ROLE` could change the risk exposure of the staker by:
+
 - increasing the `liquidationBonus` of the `(reserve, stakeToken)` configuration
 - "moving" the `stakeToken` to cover a more "risky" `reserve`
 - covering multiple reserves with the same `stakeToken` (see the "The same `stakeToken` can be configured to cover deficits of multiple reserve" issue)
@@ -425,17 +441,19 @@ This is not a security issue per se, but it's still important to be documented a
 When `map.remove` is executed by `removeSlashingConfigs` and the `key` (`stakeToken` address) removed from the configuration mapping was the key relative to an item that was not the latest one in the internal array representation, the order of the stake token configurations returned by `getReserveSlashingConfigs` will change.
 
 Let's say that we start with this configuration for `reserve_1`:
-1) `stakeToken1` with `LB 1`
-2) `stakeToken2` with `LB 2`
-3) `stakeToken3` with `LB 3`
-4) `stakeToken4` with `LB 4`
+
+1. `stakeToken1` with `LB 1`
+2. `stakeToken2` with `LB 2`
+3. `stakeToken3` with `LB 3`
+4. `stakeToken4` with `LB 4`
 
 and then we remove `stakeToken2`
 
 When we call `getReserveSlashingConfigs` again, the returned array will be:
-1) `stakeToken1` with `LB 1`
-2) `stakeToken4` with `LB 4`
-3) `stakeToken3` with `LB 3`
+
+1. `stakeToken1` with `LB 1`
+2. `stakeToken4` with `LB 4`
+3. `stakeToken3` with `LB 3`
 
 The `getReserveSlashingConfigs` is not currently used internally but only off chain or by other contracts in the ecosystem, and the Umbrella slashing logic will not work when there are zero or more than one slashing configuration for a reserve.
 
@@ -459,21 +477,20 @@ Therefore, in the current version it should be acknowledged.
 
 ## Description
 
-1) There's no way to reset/clean the `stakeToken` `underlyingOracle`. What if you want to fully remove the support for the `stakeToken` (maybe because the ratio now is broken, and you simply want to re-deploy a new `stakeToken`) and the correct behavior from now on is to simply revert/return 0 when the `latestUnderlyingAnswer` is called?
+1. There's no way to reset/clean the `stakeToken` `underlyingOracle`. What if you want to fully remove the support for the `stakeToken` (maybe because the ratio now is broken, and you simply want to re-deploy a new `stakeToken`) and the correct behavior from now on is to simply revert/return 0 when the `latestUnderlyingAnswer` is called?
 
-2) `latestUnderlyingAnswer` revert
+2. `latestUnderlyingAnswer` revert
 
 With the fact that now you still maintain the `_getUmbrellaConfigurationStorage().stakesData[stakeToken].underlyingOracle` even when the configuration has been removed, I don't know how much sense the revert error name is correct when `require(underlyingOracle != address(0), ConfigurationNotExist());` is executed in `latestUnderlyingAnswer`
 
 when `underlyingOracle != address(0)` it DOES NOT mean that the slashing configuration exists because we could be in this scenario
 
-	1) The configuration exists
-	2) The configuration does not exist anymore because it has been removed, but the oracle has not been cleaned (new logic).
+    1) The configuration exists
+    2) The configuration does not exist anymore because it has been removed, but the oracle has not been cleaned (new logic).
 
+3. Further document `struct StakeTokenData` attribute `underlyingOracle`. I think it makes sense to add more context to the natspec specifying that even if `reserve == address(0)` the `underlyingOracle` could be `!= address(0)` because of the new logic in `removeSlashingConfigs`
 
-3) Further document `struct StakeTokenData` attribute `underlyingOracle`.  I think it makes sense to add more context to the natspec specifying that even if `reserve == address(0)` the `underlyingOracle` could be `!= address(0)` because of the new logic in `removeSlashingConfigs`
-
-4) Further document the `function latestUnderlyingAnswer` natspec in `IUmbrellaConfiguration`. It could make sense to also enhance the function's natspec describing the "weird" behavior that oracle/price will return even if the configuration has been removed.
+4. Further document the `function latestUnderlyingAnswer` natspec in `IUmbrellaConfiguration`. It could make sense to also enhance the function's natspec describing the "weird" behavior that oracle/price will return even if the configuration has been removed.
 
 ## Recommendations
 
@@ -483,19 +500,20 @@ BGD Should consider applying the above suggestions
 
 > Regarding point 1, we are unable to completely stop supporting `StakeToken` (not taking into account the `pause`, which is not an optimal solution).
 >
->In any case, some intermediate values ​​will remain relative to the created `StakeToken`s. Information about them will remain in `Umbrella.getStkTokens()`, in `RewardsController` (`targetLiquidity`, `lastUpdateTimestamp`, etc cannot and shouldn't be fully zeroed).
+> In any case, some intermediate values ​​will remain relative to the created `StakeToken`s. Information about them will remain in `Umbrella.getStkTokens()`, in `RewardsController` (`targetLiquidity`, `lastUpdateTimestamp`, etc cannot and shouldn't be fully zeroed).
 >
->Therefore, in any case, there will be some "garbage" left, which would be optimal to clean up, but we cannot guarantee this for technical reasons.
+> Therefore, in any case, there will be some "garbage" left, which would be optimal to clean up, but we cannot guarantee this for technical reasons.
 >
->We also don't expect the ratio to be broken to the point where it will overflow when trying to calculate the exchange rate, it could happen, we don't deny it, but in theory we shouldn't limit ourselves because of this case. If the ratio is completely broken, then `latestAnswer` won't work correctly either, so this problem doesn't interfere with the current solution.
+> We also don't expect the ratio to be broken to the point where it will overflow when trying to calculate the exchange rate, it could happen, we don't deny it, but in theory we shouldn't limit ourselves because of this case. If the ratio is completely broken, then `latestAnswer` won't work correctly either, so this problem doesn't interfere with the current solution.
 >
->Redeploying the token also does not affect the `latestAnswer` function in any way; it will result in two different values, for different tokens, which is normal.
+> Redeploying the token also does not affect the `latestAnswer` function in any way; it will result in two different values, for different tokens, which is normal.
 
 Recommendations 2, 3 and 4 have been implemented in the [PR 130](https://github.com/bgd-labs/aave-umbrella-private/pull/130)
 
 # Validation of the commit `62f3850` AAVE DAO Umbrella repository
 
 Note: the following folders and files where considered out of scope of the review:
+
 - `src/contracts/helpers/DataAggregationHelper.sol`
 - `src/contracts/automation/*`
 - `src/contracts/payloads/*`
@@ -504,6 +522,7 @@ Note: the following folders and files where considered out of scope of the revie
 Below you can find the differences between the last commit [5b987d2](https://github.com/bgd-labs/aave-umbrella-private/commit/5b987d222355a1a8fa4b475e7f31968f66dd2394) reviewed and the requested commit to be reviewed [`62f3850`](https://github.com/aave-dao/aave-umbrella/tree/62f3850816b257087e92f41a7f37a698f00fa96e) on the final [AAVE DAO Umbrella Repo](https://github.com/aave-dao/aave-umbrella).
 
 The review confirms that these are the only differences, in the in-scope contracts, that have been applied compared to the code already reviewed from the last Security Review reported.
+
 ```diff
 --- bgd-labs/aave-umbrella-private/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:51:08
 +++ aave-dao/aave-umbrella/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:50:59
