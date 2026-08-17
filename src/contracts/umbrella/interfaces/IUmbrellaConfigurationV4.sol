@@ -46,8 +46,9 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
     /// @dev Will be deleted after removal of `SlashingConfig`
     address hub;
     /// @notice Id of the `hub` asset for which this `UmbrellaStakeToken` is configured
-    /// @dev Will be deleted after removal of `SlashingConfig`
-    uint256 assetId;
+    /// @dev Will be deleted after removal of `SlashingConfig`.
+    /// Narrowed to `uint96`, so that it shares a storage slot with `hub` and both are cleared together
+    uint96 assetId;
   }
 
   /**
@@ -351,6 +352,7 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
    * @dev Iterates over the listed `spoke`s and reads the deficit of each one from the `hub`,
    * so the cost grows with their number.
    * A `spoke` of the same `hub` and `assetId` pair that is not listed contributes nothing.
+   * Returns 0 unless the pair has exactly one `SlashingConfig`, since slashing is not possible otherwise.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @return The total amount of the new deficit slashable for this pair

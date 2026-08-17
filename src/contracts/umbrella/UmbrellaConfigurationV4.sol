@@ -10,6 +10,7 @@ import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/exten
 
 import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
 import {EnumerableSet} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol';
+import {SafeCast} from 'openzeppelin-contracts/contracts/utils/math/SafeCast.sol';
 
 import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
 import {IUmbrellaConfigurationV4} from './interfaces/IUmbrellaConfigurationV4.sol';
@@ -27,6 +28,7 @@ import {UmbrellaBase} from './UmbrellaBase.sol';
 abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfigurationV4 {
   using EnumerableMap for EnumerableMap.AddressToUintMap;
   using EnumerableSet for EnumerableSet.AddressSet;
+  using SafeCast for uint256;
   using WadRayMath for uint256;
 
   struct SpokeData {
@@ -107,8 +109,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
         // `underlyingOracle` will remain after config removal in order to make function `latestAnswer` inside `UmbrellaStakeToken` workable after config removal
         // This oracle should not be the only source of price and should not be used after removing the config, however, for the full functionality of `UmbrellaStakeToken`, we will leave it
-        delete $.stakesData[removalPairs[i].umbrellaStake].hub;
-        delete $.stakesData[removalPairs[i].umbrellaStake].assetId;
+        StakeTokenData storage stakeData = $.stakesData[removalPairs[i].umbrellaStake];
+        delete stakeData.hub;
+        delete stakeData.assetId;
 
         emit SlashingConfigurationRemoved(
           removalPairs[i].hub,
@@ -133,8 +136,8 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
 
     for (uint256 i; i < spokes.length; ++i) {
-      // `deficitOffset` and `pendingDeficit` of the `spoke` are kept, so that a re-listing of the same
-      // `spoke` takes the funds already slashed for it into account
+      // `pendingDeficit` of the `spoke` is kept, so that a re-listing of the same `spoke` takes the
+      // funds already slashed for it into account
       bool spokeRemoved = $.assetsData[spokes[i].hub][spokes[i].assetId].coveredSpokes.remove(
         spokes[i].spoke
       );
@@ -311,6 +314,13 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     return _getUmbrellaConfigurationV4Storage().slashedFundsRecipient;
   }
 
+  function _getAssetSlashingConfigsCount(
+    address hub,
+    uint256 assetId
+  ) internal view returns (uint256) {
+    return _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].configurationMap.length();
+  }
+
   function _updateSlashingConfig(SlashingConfigUpdate calldata slashConfig) internal {
     require(
       slashConfig.hub != address(0) &&
@@ -368,7 +378,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     $.stakesData[slashConfig.umbrellaStake] = StakeTokenData({
       underlyingOracle: slashConfig.umbrellaStakeUnderlyingOracle,
       hub: slashConfig.hub,
-      assetId: slashConfig.assetId
+      assetId: slashConfig.assetId.toUint96()
     });
 
     if (assetData.assetOracle != slashConfig.assetOracle) {

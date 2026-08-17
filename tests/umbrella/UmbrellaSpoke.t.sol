@@ -56,10 +56,9 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
   }
 
+  /// @dev A `spoke` can only be listed while its pair is configured, so an unconfigured pair covers no `spoke`
   function test_setDeficitOffsetNotSetup(uint256 amount) public {
-    vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfigurationV4.AssetCoverageNotSetup.selector)
-    );
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.SpokeNotCovered.selector));
     vm.prank(defaultAdmin);
     umbrella.setDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, amount);
   }

@@ -52,7 +52,6 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     address spoke,
     uint256 newDeficitOffset
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    require(getAssetSlashingConfigs(hub, assetId).length > 0, AssetCoverageNotSetup());
     require(isSpokeCovered(hub, assetId, spoke), SpokeNotCovered());
     require(
       newDeficitOffset + getPendingDeficit(hub, assetId, spoke) >=
@@ -129,7 +128,7 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     address spoke,
     uint256 amount
   ) external onlyRole(COVERAGE_MANAGER_ROLE) returns (uint256) {
-    uint256 length = getAssetSlashingConfigs(hub, assetId).length;
+    uint256 length = _getAssetSlashingConfigsCount(hub, assetId);
     uint256 pendingDeficit = getPendingDeficit(hub, assetId, spoke);
     uint256 deficitOffset = getDeficitOffset(hub, assetId, spoke);
 
