@@ -5,6 +5,7 @@ import './SlashingRobot.t.sol';
 import {GelatoSlashingRobot} from '../../src/contracts/automation/GelatoSlashingRobot.sol';
 
 contract GelatoSlashingRobot_Test is SlashingRobot_Test {
+
   function setUp() public virtual override {
     super.setUp();
     robot = SlashingRobot(address(new GelatoSlashingRobot(address(umbrella), ROBOT_GUARDIAN)));

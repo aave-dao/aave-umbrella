@@ -3,7 +3,6 @@
 `UmbrellaBatchHelper` is a smart contract designed to optimize user interactions with the [Umbrella](https://governance.aave.com/t/bgd-aave-safety-module-umbrella/18366) system and its periphery, consolidating multiple transactions into a single one, via signatures.
 
 Currently, `UmbrellaBatchHelper`covers the following:
-
 - Deposit/withdraw funds between the different available routes. This is powered by a simple "smart" router, capable of handling different input/output token types such as `Token` (`Gho` or "standard" tokens), `aToken`, `StataTokenV2` and `StakeToken`.
 - Claim accrued rewards on Umbrella, with optional restaking.
 - Activate cooldowns for specified `StakeToken`s.
@@ -16,15 +15,15 @@ The helper converts tokens through two routes:
 
 1. `StakeToken` <-> `StataTokenV2` (`StakeToken` underlying) <-> `aToken` <-> `Token` (`StataTokenV2` underlying). Example with `USDC`:
 
-   - `StakeToken`: `stkwaUSDC`
-   - `StataTokenV2`: `waUSDC`
-   - `aToken`: `aUSDC`
-   - `Token`: `USDC`
+    - `StakeToken`: `stkwaUSDC`
+    - `StataTokenV2`: `waUSDC`
+    - `aToken`: `aUSDC`
+    - `Token`: `USDC`
 
 2. `StakeToken` <-> `Token`. Example with `USDC`:
 
-   - `StakeToken`: `stkUSDC`
-   - `Token`: `USDC`
+    - `StakeToken`: `stkUSDC`
+    - `Token`: `USDC`
 
 For these routes, it is possible to redeem any token specified in the route from `StakeToken` or make a deposit, starting from any one except stake.
 
@@ -58,7 +57,7 @@ All structures and their parameters are detailed in the [interface](./interfaces
 
   - Deposits require prior approval via `permit` call or manual `approve` call for the initial token.
   - Withdrawals require `permit` call or manual `approve` call for the `StakeToken`.
-  - _Important!_ A withdrawal can only be completed if the required cooldown period has passed but is still within the `cooldown + unstakeWindow` timeframe. For further clarification, refer to the [`StakeToken` documentation](../stakeToken/README.md).
+  - *Important!* A withdrawal can only be completed if the required cooldown period has passed but is still within the `cooldown + unstakeWindow` timeframe. For further clarification, refer to the [`StakeToken` documentation](../stakeToken/README.md).
   - If the specified input token cannot be transferred to the helper’s address (due to insufficient allowance or `pause`) or cannot be directly converted to `StakeToken`, the transaction will be reverted. The same with redeem from `StakeToken`.
 
 All functions are external and batch of actions could be called using `multicall`.

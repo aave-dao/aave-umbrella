@@ -84,32 +84,32 @@ The piecewise linear curve is defined by three different sectors:
 
 1. The first sector uses a steeper, boosted formula where the emission rate scales proportionally with `totalAssets` relative to `targetLiquidity`, incentivizing early deposits. The calculation formula is:
 
-   ```solidity
-   emissionDecrease = (maxEmissionPerSecond * totalAssets) / targetLiquidity;
-   emissionPerSecond = (2 * maxEmissionPerSecond - emissionDecrease) * totalAssets / targetLiquidity;
-   ```
+    ```solidity
+    emissionDecrease = (maxEmissionPerSecond * totalAssets) / targetLiquidity;
+    emissionPerSecond = (2 * maxEmissionPerSecond - emissionDecrease) * totalAssets / targetLiquidity;
+    ```
 
 2. Between `targetLiquidity` and `targetLiquidityExcess`, the emission rate decreases from `maxEmissionPerSecond` to `flatEmissionPerSecond` (80% of `maxEmissionPerSecond`) to deter further deposits. The formula for this sector is:
 
-   ```solidity
-   deltaTarget = targetLiquidityExcess - targetLiquidity;
-   deltaEmission = maxEmissionPerSecond - flatEmissionPerSecond;
+    ```solidity
+    deltaTarget = targetLiquidityExcess - targetLiquidity;
+    deltaEmission = maxEmissionPerSecond - flatEmissionPerSecond;
 
-   emissionPerSecond = maxEmissionPerSecond - ((deltaEmission * (totalAssets - targetLiquidity)) / deltaTarget);
-   ```
+    emissionPerSecond = maxEmissionPerSecond - ((deltaEmission * (totalAssets - targetLiquidity)) / deltaTarget);
+    ```
 
 3. Beyond `targetLiquidityExcess`, the emission rate becomes flat to discourage additional deposits. The formula is:
 
-   ```solidity
-   emissionPerSecond = flatEmission;
-   ```
+    ```solidity
+    emissionPerSecond = flatEmission;
+    ```
 
 - **`maxEmissionPerSecond` Constraints:**
   - **Maximum:** `1,000 * 1e18` per second.
   - **Minimum:** Lesser of `2 wei` or `targetLiquidity / 1e15`. (See [EmissionMath](libraries/EmissionMath.sol))
 - **`targetLiquidity` Constraints:**
   - **Minimum:** 1 asset token.
-  - **Maximum:** `1e36`. (The upper bound is indirectly provided by the further validation performed on the minimum value required for the `maxEmissionPerSecond`. `maxEmissionPerSecond` must be <= 1e21 but also >= targetLiquidity \* 1e3 / 1e18.)
+  - **Maximum:** `1e36`. (The upper bound is indirectly provided by the further validation performed on the minimum value required for the `maxEmissionPerSecond`. `maxEmissionPerSecond` must be <= 1e21 but also >= targetLiquidity * 1e3 / 1e18.)
 - **Precision Loss:**
   - If totalSupply is below `1e6`, rewards distribution is adjusted to prevent overflow, which may affect fairness of reward distribution.
   - If `totalSupply/totalAssets` ratio exceeds `100` with minimal emission, precision may degrade, potentially requiring a `StakeToken` redeployment.

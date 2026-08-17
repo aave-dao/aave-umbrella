@@ -15,39 +15,29 @@ contract RewardsControllerHarness is RewardsController {
 
   bytes32 private constant __RewardsControllerStorageLocation =
     0x7a5f91582c97dd0b2921808fbdbab73d3de091aefc8bf8607868e058abb2e300;
+  
 
   // The "getStorage" functions of the contracts RewardsController and RewardsDistributor are
   // private, hence we make a copy of them.
-  function __getRewardsDistributorStorage()
-    private
-    pure
-    returns (RewardsDistributorStorage storage $)
-  {
-    assembly {
-      $.slot := __RewardsDistributorStorageLocation
-    }
+  function __getRewardsDistributorStorage() private pure returns (RewardsDistributorStorage storage $) {
+    assembly {$.slot := __RewardsDistributorStorageLocation}
   }
 
-  function __getRewardsControllerStorage()
-    internal
-    pure
-    returns (RewardsControllerStorage storage $)
-  {
-    assembly {
-      $.slot := __RewardsControllerStorageLocation
-    }
+  function __getRewardsControllerStorage() internal pure returns (RewardsControllerStorage storage $) {
+    assembly {$.slot := __RewardsControllerStorageLocation}
   }
+
 
   function get_rewardsInfo_length(address asset) external view returns (uint) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
     return assetData.rewardsInfo.length;
   }
-
+  
   function get_targetLiquidity(address asset) external view returns (uint160) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
     return assetData.targetLiquidity;
   }
-
+  
   //================================================
   // RewardData struct
   //================================================
@@ -56,10 +46,7 @@ contract RewardsControllerHarness is RewardsController {
     return assetData.data[reward].rewardData.index;
   }
 
-  function get_maxEmissionPerSecondScaled(
-    address asset,
-    address reward
-  ) external view returns (uint72) {
+  function get_maxEmissionPerSecondScaled(address asset, address reward) external view returns (uint72) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
     return assetData.data[reward].rewardData.maxEmissionPerSecondScaled;
   }
@@ -77,24 +64,18 @@ contract RewardsControllerHarness is RewardsController {
   //================================================
   // UserData struct
   //================================================
-  function get_userIndex(
-    address asset,
-    address reward,
-    address user
-  ) external view returns (uint144) {
+  function get_userIndex(address asset, address reward, address user) external view returns (uint144) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
-    return assetData.data[reward].userData[user].index;
+    return assetData.data[reward].userData[user].index ;
   }
 
-  function get_accrued(
-    address asset,
-    address reward,
-    address user
-  ) external view returns (uint112) {
+  function get_accrued(address asset, address reward, address user) external view returns (uint112) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
-    return assetData.data[reward].userData[user].accrued;
+    return assetData.data[reward].userData[user].accrued ;
   }
 
+
+  
   function get_distributionEnd__arr(address asset, uint ind) external view returns (uint32) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
     return assetData.rewardsInfo[ind].distributionEnd;
@@ -108,19 +89,16 @@ contract RewardsControllerHarness is RewardsController {
 
   function get_rewardPayer(address asset, address reward) external view returns (address) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
-    return assetData.data[reward].rewardPayer;
+    return assetData.data[reward].rewardPayer ;
   }
 
   function get_lastUpdateTimestamp(address asset) external view returns (uint32) {
     InternalStructs.AssetData storage assetData = __getRewardsControllerStorage().assetsData[asset];
     return assetData.lastUpdateTimestamp;
   }
+  
 
-  function havoc_other_contracts() external {
-    DUMMY.havoc_other_contracts();
-  }
 
-  function havoc_all_contracts() external {
-    DUMMY.havoc_all_contracts_dummy();
-  }
+  function havoc_other_contracts() external {DUMMY.havoc_other_contracts();}
+  function havoc_all_contracts() external {DUMMY.havoc_all_contracts_dummy();}
 }

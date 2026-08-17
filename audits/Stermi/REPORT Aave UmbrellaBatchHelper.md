@@ -24,12 +24,10 @@ A smart contract security review can never verify the complete absence of vulner
 `UmbrellaBatchHelper` is a smart contract designed to optimize user interactions with the `Umbrella` system and its periphery, consolidating multiple transactions into a single one, via signatures.
 
 Previous review commit:
-
 - Link: https://github.com/bgd-labs/aave-umbrella-private/tree/main/src/contracts/helpers
 - Last commit: `e3dced60030a0b3d9fd469a333d25517c718edad`
 
 Latest review commit:
-
 - Link: https://github.com/aave-dao/aave-umbrella/tree/main/src/contracts/umbrella
 - Last commit: `62f3850816b257087e92f41a7f37a698f00fa96e`
 
@@ -38,7 +36,6 @@ Latest review commit:
 **StErMi**, is an independent smart contract security researcher. He serves as a Lead Security Researcher at Spearbit and has identified multiple bugs in the wild on Immunefi and on protocol's bounty programs like the Aave Bug Bounty.
 
 Do you want to connect with him?
-
 - [stermi.xyz website](https://stermi.xyz/)
 - [@StErMi on Twitter](https://twitter.com/StErMi)
 
@@ -66,9 +63,7 @@ At the end of the report you can find all the details relative to the validation
 **Severity** - the overall criticality of the risk
 
 ---
-
 # Findings Summary
-
 | ID                 | Title                                                                                                                     | Severity | Status          |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
 | [L-01]             | `cooldownPermit` is not validating the `stakeToken`                                                                       | Low      | Fixed           |
@@ -97,7 +92,6 @@ While it's true that the `p.stakeToken.cooldownWithPermit` call made inside `coo
 **StErMi:** The recommendations have been implemented in the [PR 125](https://github.com/bgd-labs/aave-umbrella-private/pull/125)
 
 # [L-02] User could end up earning less reward than deserved or losing all of them when transfer and deposit `StataTokenV2` tokens
-
 ## Context
 
 - [ERC20AaveLMUpgradeable.sol#L159-L177](https://github.com/bgd-labs/aave-v3-origin/blob/aa774ee3d10c9353e837df06e67a56ad47e7b0f2/src/contracts/extensions/stata-token/ERC20AaveLMUpgradeable.sol#L159-L177)
@@ -118,26 +112,22 @@ When the user wraps their `aToken` in `stataToken` the reward mechanism is quite
 When the user performs a `mint/burn/transfer` (associated to `wrap`, `unwrap` and `transfer/transferFrom` operations) of `stataToken` the system will indeed update and track the user's accrued rewards but will use a "cached" list of rewards to iterate on:
 
 ```solidity
-function _update(
-  address from,
-  address to,
-  uint256 amount
-) internal virtual override {
-  ERC20AaveLMStorage storage $ = _getERC20AaveLMStorage();
-  for (uint256 i = 0; i < $._rewardTokens.length; i++) {
-    address rewardToken = address($._rewardTokens[i]);
-    uint256 rewardsIndex = getCurrentRewardsIndex(rewardToken);
+  function _update(address from, address to, uint256 amount) internal virtual override {
+    ERC20AaveLMStorage storage $ = _getERC20AaveLMStorage();
+    for (uint256 i = 0; i < $._rewardTokens.length; i++) {
+      address rewardToken = address($._rewardTokens[i]);
+      uint256 rewardsIndex = getCurrentRewardsIndex(rewardToken);
 
-    if (from != address(0)) {
-      _updateUser(from, rewardsIndex, rewardToken);
-    }
+      if (from != address(0)) {
+        _updateUser(from, rewardsIndex, rewardToken);
+      }
 
-    if (to != address(0) && from != to) {
-      _updateUser(to, rewardsIndex, rewardToken);
+      if (to != address(0) && from != to) {
+        _updateUser(to, rewardsIndex, rewardToken);
+      }
     }
+    super._update(from, to, amount);
   }
-  super._update(from, to, amount);
-}
 ```
 
 The `$._rewardTokens` list is updated only by the `__ERC20AaveLM_init_unchained` function (called during initialization) or when the public `refreshRewardTokens` function is called.
@@ -160,7 +150,6 @@ BDG should also consider enforcing the execution of the `StataTokenV2.refreshRew
 While the docs are a bit outdated and there is now a bot doing it, it clearly states the behavior you describe here.
 
 # [I-01] General informational issues
-
 ## Description
 
 ### Natspec typos, errors or improvements
@@ -201,7 +190,6 @@ BGD should fix all the suggestions listed in the above section
 **StErMi:** confirmed.
 
 # [I-02] `claimRewardsPermit` should also skip the iteration when the actual reward balance is zero
-
 ## Context
 
 - [UmbrellaBatchHelper.sol#L119](https://github.com/bgd-labs/aave-umbrella-private/blob/441b519a51787b59e0f6f137ecb90c8fffc8a07b/src/contracts/helpers/UmbrellaBatchHelper.sol#L119)
@@ -220,12 +208,11 @@ but is not skipping the iteration if the **actual** number of rewards received i
 
 ## Recommendations
 
-BGD should consider skipping the iteration if `actualAmountReceived == 0`. This precaution could avoid possible unexpected behaviours (possible reverts) or the emission of useless events when the amount of minted token on the `StakeToken` is equal to zero (ERC4626 **does not revert** when the deposit amount is equal to zero).
+BGD should consider skipping the iteration if `actualAmountReceived == 0`. This precaution could avoid possible unexpected behaviours (possible reverts) or the emission of useless events when the amount of minted token on the `StakeToken` is equal to zero (ERC4626 **does not revert**  when the deposit amount is equal to zero).
 
 **StErMi:** The recommendations have been implemented in the [PR 126](https://github.com/bgd-labs/aave-umbrella-private/pull/126)
 
 # [I-03] `_checkAndInitializePath` should revert when the `stakeToken` is paused
-
 ## Context
 
 - [UmbrellaBatchHelper.sol#L312](https://github.com/bgd-labs/aave-umbrella-private/blob/441b519a51787b59e0f6f137ecb90c8fffc8a07b/src/contracts/helpers/UmbrellaBatchHelper.sol#L312)
@@ -257,25 +244,25 @@ There are scenarios where the `abi.decode` call will **not** revert even if `dat
 Below are some examples of the possible scenarios:
 
 ```solidity
-function testMoreToDecode() public {
-  address tokenAddress = address(1);
-  uint256 moreData = 123;
-  bytes memory data = abi.encode(tokenAddress, moreData);
-  address aToken = abi.decode(data, (address));
+  function testMoreToDecode() public {
+    address tokenAddress = address(1);
+    uint256 moreData = 123;
+    bytes memory data = abi.encode(tokenAddress, moreData);
+    (address aToken) = abi.decode(data, (address));
 
-  assertEq(data.length, 64);
-  assertEq(aToken, tokenAddress);
-}
+    assertEq(data.length, 64);
+    assertEq(aToken, tokenAddress);
+  }
 
-function testMoreToDecode2() public {
-  address tokenAddress = address(1);
-  uint256 moreData = 123;
-  bytes memory data = abi.encodePacked(tokenAddress, moreData);
-  address aToken = abi.decode(data, (address));
+    function testMoreToDecode2() public {
+    address tokenAddress = address(1);
+    uint256 moreData = 123;
+    bytes memory data = abi.encodePacked(tokenAddress, moreData);
+    (address aToken) = abi.decode(data, (address));
 
-  assertEq(data.length, 52);
-  assertTrue(aToken != tokenAddress);
-}
+    assertEq(data.length, 52);
+    assertTrue(aToken != tokenAddress);
+  }
 ```
 
 ## Recommendations
@@ -289,7 +276,6 @@ Acknowledged.
 # Validation of the commit `62f3850` AAVE DAO Umbrella repository
 
 Note: the following folders and files where considered out of scope of the review:
-
 - `src/contracts/helpers/DataAggregationHelper.sol`
 - `src/contracts/automation/*`
 - `src/contracts/payloads/*`
@@ -298,7 +284,6 @@ Note: the following folders and files where considered out of scope of the revie
 Below you can find the differences between the last commit [5b987d2](https://github.com/bgd-labs/aave-umbrella-private/commit/5b987d222355a1a8fa4b475e7f31968f66dd2394) reviewed and the requested commit to be reviewed [`62f3850`](https://github.com/aave-dao/aave-umbrella/tree/62f3850816b257087e92f41a7f37a698f00fa96e) on the final [AAVE DAO Umbrella Repo](https://github.com/aave-dao/aave-umbrella).
 
 The review confirms that these are the only differences, in the in-scope contracts, that have been applied compared to the code already reviewed from the last Security Review reported.
-
 ```diff
 --- bgd-labs/aave-umbrella-private/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:51:08
 +++ aave-dao/aave-umbrella/src/contracts/helpers/UmbrellaBatchHelper.sol	2025-06-01 07:50:59

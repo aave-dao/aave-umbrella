@@ -25,7 +25,7 @@ Unless stated otherwise, this document describes `Umbrella`, the version coverin
 - **StakeToken factory and controller**. Creation and configuration of all `StakeToken`s happens via the Umbrella contract, to simplify operational flows and data gathering.
 - **Slashing**. Functionality to slash `StakeToken`s whenever the deficit conditions in the Aave pool and the Umbrella internal accounting are met. Umbrella also allows for slightly more sophisticated slashing mechanisms like its own Liquidation Fee, allowing to add a margin on top of the value required to slash, to cover any additional cost.
 - **Deficit coverage**. Functionality to cover deficit on the connected Aave pool by transferring aTokens from the caller (or non-aTokens for cases like GHO).
-  Apart from reading the `deficit` for a specific asset (reserve) on the Aave pool associated, Umbrella also keeps internal accounting for aspects like pending deficit to be covered after slash, or configurable slashing offset to consider and not slash until reaching it. Additionally, Umbrella is the contract keeping track of the `StakeToken`s covering each Aave reserve, with a 1:1 relation in this initial version: each Aave reserve has a single `StakeToken` associated.
+Apart from reading the `deficit` for a specific asset (reserve) on the Aave pool associated, Umbrella also keeps internal accounting for aspects like pending deficit to be covered after slash, or configurable slashing offset to consider and not slash until reaching it. Additionally, Umbrella is the contract keeping track of the `StakeToken`s covering each Aave reserve, with a 1:1 relation in this initial version: each Aave reserve has a single `StakeToken` associated.
 
 <br>
 
@@ -112,6 +112,7 @@ There are four roles used to manage `StakeToken`s, slash configurations, coverag
 - **Functionality:**
   - Even if permissioned, doing basic validations for consistency of deficit, pending deficit, and offset.
 
+
 ### `updateSlashingConfigs`
 
 - **Purpose:** Add or update slashing configurations.
@@ -147,7 +148,7 @@ There are four roles used to manage `StakeToken`s, slash configurations, coverag
 
 <br>
 
-_Additionally, Umbrella has some extra "minor" functions to set StakeToken parameters, or pause/unpause_
+*Additionally, Umbrella has some extra "minor" functions to set StakeToken parameters, or pause/unpause*
 
 <br>
 
@@ -156,32 +157,31 @@ _Additionally, Umbrella has some extra "minor" functions to set StakeToken param
 A realistic example of full flow slash + coverage is as follows:
 
 1. The function `slash(USDC)` is called, where `USDC` represents the address of the `USDC` reserve. Within this function, the following steps take place:
-
-   1. The `isReserveSlashable(USDC)` check is performed. This returns a flag indicating whether slashing is possible and the amount of the new deficit.
-      1. The current value of the pool deficit for the reserve is calculated.
-      2. The presence of a new deficit is identified by comparing the current deficit with the previously established value.
-      3. If a new deficit exists and the number of configurations for the reserve is equal to 1, the function confirms that a slash can be performed. Otherwise slashing is not possible.
-   2. If slashing is not possible, the function terminates.
-   3. The number of configurations and the parameters set for this reserve are determined. Should be 1 in the current version.
-   4. The internal function `_slashAsset()` is called. Inside this function:
-      1. The deficit is recalculated, taking into account the `liquidationFee` (for most assets, the bonus will be 0%).
-      2. The deficit amount is multiplied by the price of the reserve (the price is obtained from Aave's standard oracle).
-      3. The price of the underlying asset to be slashed for coverage is set.
-      4. The quantity of the asset to be slashed is determined.
-      5. The actual slash of the asset is performed, and the real amount successfully seized is returned. (This may differ from the requested amount if, for example, the `UmbrellaStakeToken` does not have enough balance locked, considering also `liquidationFee` commission). The assets are transferred to the specified `SLASHED_FUNDS_RECIPIENT` address (e.g., the Aave collector).
-      6. A recalculation determines the actual amount of the deficit that has been covered as a result.
-   5. Using the obtained result, the new value of `pendingDeficit` is set.
-   6. The result is returned.
+    1. The `isReserveSlashable(USDC)` check is performed. This returns a flag indicating whether slashing is possible and the amount of the new deficit.
+        1. The current value of the pool deficit for the reserve is calculated.
+        2. The presence of a new deficit is identified by comparing the current deficit with the previously established value.
+        3. If a new deficit exists and the number of configurations for the reserve is equal to 1, the function confirms that a slash can be performed. Otherwise slashing is not possible.
+    2. If slashing is not possible, the function terminates.
+    3. The number of configurations and the parameters set for this reserve are determined. Should be 1 in the current version.
+    4. The internal function `_slashAsset()` is called. Inside this function:
+        1. The deficit is recalculated, taking into account the `liquidationFee` (for most assets, the bonus will be 0%).
+        2. The deficit amount is multiplied by the price of the reserve (the price is obtained from Aave's standard oracle).
+        3. The price of the underlying asset to be slashed for coverage is set.
+        4. The quantity of the asset to be slashed is determined.
+        5. The actual slash of the asset is performed, and the real amount successfully seized is returned. (This may differ from the requested amount if, for example, the `UmbrellaStakeToken` does not have enough balance locked, considering also `liquidationFee` commission). The assets are transferred to the specified `SLASHED_FUNDS_RECIPIENT` address (e.g., the Aave collector).
+        6. A recalculation determines the actual amount of the deficit that has been covered as a result.
+    5. Using the obtained result, the new value of `pendingDeficit` is set.
+    6. The result is returned.
 
 2. Post-slash, the system in high-level "hedged", as a trusted entity (e.g. Aave Collector), holds the aTokens to be burnt. During this time before cover, more slashing could happen, not creating any type of issue.
-   Operationally, if not using a different setup handling that in advance, the entity holding the slashed aTokens will need to prepare them for cover, for example by unwrapping them and giving allowance to Umbrella.
+ Operationally, if not using a different setup handling that in advance, the entity holding the slashed aTokens will need to prepare them for cover, for example by unwrapping them and giving allowance to Umbrella.
 
 3. The function `coverPendingDeficit(USDC, amount)` is called, where the amount corresponds to the number of tokens we are ready to provide for deficit elimination.
-   1. First, it is determined whether there is a deficit that we are attempting to cover.
-   2. It is determined whether virtual accounting is enabled (detecting if GHO or not).
-   3. Based on the status of virtual accounting, the transfer is performed using either `aToken` or the `reserve` itself.
-   4. The actual elimination of the deficit is carried out.
-   5. The pending deficit accounting is updated, discounting from it the covered amount.
+    1. First, it is determined whether there is a deficit that we are attempting to cover.
+    2. It is determined whether virtual accounting is enabled (detecting if GHO or not).
+    3. Based on the status of virtual accounting, the transfer is performed using either `aToken` or the `reserve` itself.
+    4. The actual elimination of the deficit is carried out.
+    5. The pending deficit accounting is updated, discounting from it the covered amount.
 
 <br>
 
@@ -194,7 +194,7 @@ For example:
 - `stkwaUSDC` - `StakeToken` (if the suffix passed to `createStakeTokens` is empty)
 - `waUSDC` - `wrapped aToken` (also the underlying asset of the `StakeToken`)
 - `aUSDC` - `aToken`
-- `USDC` - `reserve`
+- `USDC` -  `reserve`
 
 The price of the wrapped aToken is calculated as:
 
@@ -210,10 +210,10 @@ Given current values, the error in this calculation should not exceed 1 wei. Thi
 
 - In the current version, the ability to cover the reserve using a basket of assets is disabled. However, internal storage is designed in such a way that future updates to enable the ability to cover deficit with basket should not change its structure.
 - If one `StakeToken` is replaced by another similar one (for technical reasons), governance must firstly delete the old one from slashing config (using `removeSlashingConfigs`) and then add new (using `updateSlashingConfigs`) in order to reinstall the deficit offset (to avoid instant slash of new users).
-  Still, this is a very ad-hoc action that should have a human-review component involved, and not expect the code to handle all edge scenarios flawlessly.
+ Still, this is a very ad-hoc action that should have a human-review component involved, and not expect the code to handle all edge scenarios flawlessly.
 - The underlying asset of the `StakeToken` must always have the same number of decimals as the corresponding `aToken` or `reserve`. Consequently, we assume that different `LP` tokens or tokens of other assets (e.g., ETH to cover BTC) cannot be used in the current version.
 - Inheriting the assumption from Aave itself, the Umbrella system assumes non-"weird" behaviour on the tokens being added as underlying of StakeToken/s, and Aave reserves covered. Including but non-limited to ERC-777, tokens with active fee on transfer, etc.
-  In any case, instantiation/activation of new StakeToken/s on Umbrella involves a governance procedure with human/tooling review included.
+ In any case, instantiation/activation of new StakeToken/s on Umbrella involves a governance procedure with human/tooling review included.
 - Umbrella's design assumes that whenever an existing Aave reserve is initialized with a StakeToken, the existing deficit on the pool will not immediately cause a slash. In addition, it is always recommended just after initialization to add a certain deficit offset (via `setDeficitOffset()`) on top of the current pool's deficit, to avoid early slashings (even if very minor) due to dust deficit.
 
 <br>
