@@ -91,8 +91,8 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     assertEq(underlying.balanceOf(address(umbrella)), 0);
   }
 
-  /// @dev Eliminating a deficit swaps bad debt for real liquidity, so the suppliers of the `hub` are
-  /// left exactly as well off as they were
+  /// @dev Eliminating a deficit swaps bad debt for real liquidity, so neither the added shares of the
+  /// `hub` nor the assets they are worth to the other spokes change
   function test_e2e_coverageDoesNotChangeOtherSuppliers() public {
     _reportDeficit(lendingSpoke, 1_000 * 1e6);
 
@@ -110,8 +110,8 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     assertEq(_spokeDeficit(address(lendingSpoke)), 0);
   }
 
-  /// @dev With the drawn interest accrued the added shares are worth more than one asset each, which is
-  /// the case the coverage has to round through the shares it receives instead of the amount it paid
+  /// @dev Once the drawn interest has accrued the added shares are worth more than one asset each, which
+  /// is why the coverage sizes the elimination from the shares it receives and not from the amount it paid
   function test_e2e_coverDeficitWithAppreciatedShares() public {
     lendingSpoke.draw(assetId, 500_000 * 1e6, borrower);
 

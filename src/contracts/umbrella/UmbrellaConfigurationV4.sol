@@ -99,9 +99,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
       bool configRemoved = assetData.configurationMap.remove(removalPairs[i].umbrellaStake);
       if (configRemoved) {
-        // A `spoke` is only listed in the coverage of a configured pair, so that its `deficitOffset` is
-        // always initialized whenever it becomes slashable. The last configuration of a pair can therefore
-        // only be removed once every `spoke` is removed from its coverage.
+        // A `spoke` is only listed while its pair is configured, so that its `deficitOffset` is always
+        // initialized before it can be slashed. The last configuration of a pair therefore stays until
+        // every `spoke` is removed from its coverage.
         require(
           assetData.configurationMap.length() != 0 || assetData.coveredSpokes.length() == 0,
           SpokesStillCovered()
@@ -411,15 +411,15 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       coverage.assetId
     ];
 
-    // The coverage of a `spoke` always starts with an initialized `deficitOffset`, so a `spoke` can only be
-    // listed while its pair is configured. Otherwise the deficit reported while the pair had no
-    // `SlashingConfig` would become slashable as soon as the first one is installed.
+    // Listing initializes the `deficitOffset` below, so it can only happen on a configured pair. Otherwise
+    // the deficit reported while the pair had no `SlashingConfig` would become slashable as soon as the
+    // first one is installed.
     require(assetData.configurationMap.length() != 0, AssetCoverageNotSetup());
 
     if (assetData.coveredSpokes.add(coverage.spoke)) {
-      // The deficit already reported by the `spoke` is set to the `deficitOffset`, as otherwise an immediate slashing could be triggered.
+      // The deficit already reported by the `spoke` becomes its `deficitOffset`, as otherwise an immediate slashing could be triggered.
       // If `pendingDeficit` is not zero for some reason, e.g. the `spoke` is re-listed without previous full coverage of its `pendingDeficit`,
-      // than we need to take this value into account to set new `deficitOffset` here.
+      // then we need to take this value into account to set the new `deficitOffset` here.
       uint256 spokeDeficit = _getSpokeDeficit(coverage.hub, coverage.assetId, coverage.spoke);
       uint256 pendingDeficit = assetData.spokesData[coverage.spoke].pendingDeficit;
 

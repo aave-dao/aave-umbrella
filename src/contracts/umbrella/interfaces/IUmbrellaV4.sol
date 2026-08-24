@@ -68,10 +68,10 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
   );
 
   /**
-   * @notice Event is emitted when residual funds deposited in a `Hub` are withdrawn to the Collector.
+   * @notice Event is emitted when residual funds deposited in a `Hub` are withdrawn to the slashed funds recipient.
    * @param hub `Hub` from which the funds are withdrawn
    * @param assetId Id of the withdrawn asset
-   * @param amount Amount of underlying withdrawn to the Collector
+   * @param amount Amount of underlying withdrawn
    * @param shares Amount of `UmbrellaSpoke` shares removed from the `Hub`
    */
   event StrandedFundsWithdrawn(
@@ -109,7 +109,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
   ) external;
 
   /**
-   * @notice Withdraws residual funds deposited by this contract in a `Hub` to the Collector.
+   * @notice Withdraws residual funds deposited by this contract in a `Hub` to the slashed funds recipient.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param amount Amount of underlying to withdraw

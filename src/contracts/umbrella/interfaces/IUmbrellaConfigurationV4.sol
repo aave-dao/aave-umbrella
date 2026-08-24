@@ -14,7 +14,7 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
     /// @notice Percentage of funds slashed on top of the new deficit
     uint256 liquidationFee;
     /// @notice Oracle of the `hub` asset which deficit is covered
-    /// @dev Shared by every `SlashingConfig` of this `hub` and `assetId` pair, the last update wins
+    /// @dev Shared by every `SlashingConfig` of this `hub` and `assetId` pair. The last update wins
     address assetOracle;
     /// @notice Oracle of `UmbrellaStakeToken`s underlying
     address umbrellaStakeUnderlyingOracle;
@@ -146,7 +146,7 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   error InvalidHub();
 
   /**
-   * @dev Attempted to add `assetId` to configuration, which isn't exist in the `Hub`.
+   * @dev Attempted to add `assetId` to configuration, which doesn't exist in the `Hub`.
    */
   error InvalidAsset();
 
@@ -190,8 +190,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
    * @notice Updates a set of slashing configurations.
    * @dev If the configs contain an already existing configuration, the configuration will be overwritten.
    * If install more than 1 configuration, then `slash` will not work in the current version.
-   * A `spoke` cannot be covered before its pair is configured, so installing the first configuration of a
-   * pair never turns an already reported deficit into a slashable one and leaves every `deficitOffset` alone.
+   * A `spoke` can only be listed once its pair is configured, so installing the first configuration of a pair
+   * neither makes an already reported deficit slashable nor changes any `deficitOffset`.
    * The `umbrellaStake` underlying is expected to be the share token of the `TokenizationSpoke`
    * linked to the same `hub` and `assetId` pair.
    * @param slashingConfigs An array of configurations
@@ -203,8 +203,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
    * @dev If such a config did not exist, the function does not revert.
    * Reverts if it would leave a `hub` and `assetId` pair without any configuration while `spoke`s are still
    * listed in its coverage, so a covered `spoke` can never outlive the configuration of its pair.
-   * Removing the last configuration therefore requires `removeCoveredSpokes` to be called first, while
-   * replacing a configuration should install the new one before removing the old one.
+   * Removing the last configuration therefore requires `removeCoveredSpokes` to be called first.
+   * Replacing a configuration should install the new one before removing the old one.
    * @param removalPairs An array of coverage tuples (hub:assetId:stk) to remove
    */
   function removeSlashingConfigs(SlashingConfigRemoval[] calldata removalPairs) external;
@@ -212,9 +212,9 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   /**
    * @notice Adds a set of `spoke`s to the coverage of their `hub` and `assetId` pair.
    * @dev Only deficit of a listed `spoke` is tracked and can be slashed or covered.
-   * On addition the `deficitOffset` of the `spoke` is initialized with its current deficit,
-   * so that a deficit accrued before the listing cannot be slashed. Listing is therefore the only way for a
-   * `spoke` deficit to become slashable and requires the pair to already have a slashing configuration.
+   * On addition the `deficitOffset` of the `spoke` is initialized with its current deficit, so that a deficit
+   * accrued before the listing cannot be slashed. Listing is therefore the only way for a `spoke` deficit to
+   * become slashable, and it requires the pair to already have a slashing configuration.
    * Reverts unless this `Umbrella` is listed as a `spoke` of the same `hub` and `assetId` pair,
    * as otherwise a slashed deficit could never be eliminated.
    * If such a `spoke` was already listed, the function does not revert.

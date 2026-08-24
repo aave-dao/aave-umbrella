@@ -16,7 +16,7 @@ import {UmbrellaStakeToken} from '../stakeToken/UmbrellaStakeToken.sol';
  * @title UmbrellaStkManager
  * @notice An abstract contract for creating and managing `UmbrellaStakeToken`s, including changing `cooldown` and `unstakeWindow` parameters,
  * pausing or unpausing token and rescuing funds.
- * @dev Version agnostic, it is shared by every `Umbrella` version.
+ * @dev Shared by every `Umbrella` version.
  * @author BGD labs
  */
 abstract contract UmbrellaStkManager is UmbrellaBase, IUmbrellaStkManager {

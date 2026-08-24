@@ -2,7 +2,7 @@
 
 `Umbrella` is the core smart contract within the broader [Umbrella](https://governance.aave.com/t/bgd-aave-safety-module-umbrella/18366) project, enabling creation, configuration and slashing of `UmbrellaStakeToken`s, together with coverage of deficit in the associated Aave pool.
 
-Unless stated otherwise, this document describes `Umbrella`, the version covering an Aave V3 `Pool`. The Aave V4 version, `UmbrellaSpoke`, is described in [its own section](#umbrella-on-aave-v4-umbrellaspoke).
+This document describes `Umbrella`, the version covering an Aave V3 `Pool`. The Aave V4 version, `UmbrellaSpoke`, has [its own section](#umbrella-on-aave-v4-umbrellaspoke).
 
 <br>
 
@@ -220,54 +220,52 @@ Given current values, the error in this calculation should not exceed 1 wei. Thi
 
 ## Umbrella on Aave V4 (`UmbrellaSpoke`)
 
-Everything above describes `Umbrella`, the version covering an Aave V3 `Pool`. `UmbrellaSpoke` is its Aave V4 counterpart: same slashing and coverage mechanics, same roles, and the very same `UmbrellaStkManager` for creating and configuring `StakeToken`s. Only the differences are described here.
+`UmbrellaSpoke` is the Aave V4 counterpart of `Umbrella`. Slashing, coverage, the roles and the `UmbrellaStkManager` used to create and configure `StakeToken`s all work as described above. Only the differences follow.
 
 ### What replaces a `reserve`
 
-A V3 `reserve` is one asset on one `Pool`. The equivalent position in V4 is a triple:
+A V3 `reserve` is one asset on one `Pool`. In V4 the same position takes three values:
 
-- **`hub`** - the `Hub` holding the liquidity. One `UmbrellaSpoke` instance can cover several of them.
-- **`assetId`** - the id of the asset on that `hub` whose deficit is covered.
-- **`spoke`** - the `spoke` which reported the deficit. A `Hub` accounts for deficit per `spoke`, so `Umbrella` does too.
+- `hub`. The `Hub` holding the liquidity. One `UmbrellaSpoke` instance can cover several of them.
+- `assetId`. The id of the asset on that `hub` whose deficit is covered.
+- `spoke`. The `spoke` which reported the deficit. A `Hub` accounts for deficit per `spoke`, so `Umbrella` does too.
 
-`SlashingConfig`s and the oracle of the covered asset are set per `hub` and `assetId` pair, and shared by every `spoke` listed in that pair's coverage. `deficitOffset` and `pendingDeficit` are tracked per `spoke`. A deficit reported by a `spoke` that is not listed is neither slashed nor covered.
+`SlashingConfig`s and the oracle of the covered asset are set per `hub` and `assetId` pair, and every `spoke` listed in that pair's coverage shares them. `deficitOffset` and `pendingDeficit` are tracked per `spoke`. A deficit reported by a `spoke` that is not listed is neither slashed nor covered.
 
-Unlike V3, the price of the covered asset comes from an `assetOracle` configured on `Umbrella` itself rather than from the `Pool`'s oracle, and it must report the same number of decimals as the `StakeToken` underlying oracle.
+The price of the covered asset comes from an `assetOracle` configured on `Umbrella` itself, not from the `Pool`'s oracle as in V3. It must report the same number of decimals as the `StakeToken` underlying oracle.
 
-### Coverage takes two steps, and their order matters
+### Covering a `spoke` takes two steps
 
-Covering a `spoke` requires both parts to be in place, and `slash` only works once both are:
+1. `updateSlashingConfigs` registers the `StakeToken`, its `liquidationFee` and the oracles for a `hub` and `assetId` pair.
+2. `addCoveredSpokes` lists a `spoke` of that pair and initializes its `deficitOffset` with the deficit it has already reported, so that nothing accrued before the listing can be slashed.
 
-1. `updateSlashingConfigs` - registers the `StakeToken`, its `liquidationFee` and the oracles for a `hub` and `assetId` pair.
-2. `addCoveredSpokes` - lists a `spoke` of that pair, and initializes its `deficitOffset` with the deficit it has already reported, so that nothing accrued before the listing can be slashed.
-
-Since step 2 is what sets the offset, it must also be the last of the two to happen — otherwise a deficit reported while the pair had no configuration would become slashable the moment one is installed. `UmbrellaSpoke` enforces that rather than relying on the order of a payload:
+`slash` only works once both are done, and step 2 has to be the last of the two. Otherwise a deficit reported while the pair had no configuration would become slashable the moment one is installed. `UmbrellaSpoke` enforces that order instead of relying on the order of a payload:
 
 - `addCoveredSpokes` reverts with `AssetCoverageNotSetup` if the pair has no `SlashingConfig` yet.
 - `removeSlashingConfigs` reverts with `SpokesStillCovered` if removing the last configuration of a pair would leave a `spoke` listed in its coverage.
 
-Together these hold the invariant **a covered `spoke` never outlives the configuration of its pair**, which makes `addCoveredSpokes` the only way a deficit can become slashable. The operational consequences:
+Together they hold one invariant: a covered `spoke` never outlives the configuration of its pair. `addCoveredSpokes` is therefore the only way a deficit can become slashable. In practice:
 
-- **Setting up coverage:** configure the pair first, then list its `spoke`s.
-- **Replacing a `StakeToken`:** install the new configuration _before_ removing the old one, so the pair is never left unconfigured and the `spoke`s stay covered throughout. This is the reverse of the V3 procedure, where the offset was reinstalled by deleting the old configuration first.
-- **Decommissioning coverage:** cover any outstanding `pendingDeficit` first, then `removeCoveredSpokes`, then `removeSlashingConfigs`. A `spoke` removed from the coverage keeps its `deficitOffset` and `pendingDeficit` for a possible re-listing, but `coverPendingDeficit` only works while the `spoke` is listed, so an unlisted `spoke` with a non-zero `pendingDeficit` has to be listed again to settle it.
+- **Setting up coverage.** Configure the pair first, then list its `spoke`s.
+- **Replacing a `StakeToken`.** Install the new configuration before removing the old one, so the pair is never left unconfigured and its `spoke`s stay covered throughout. This is the reverse of the V3 procedure, where the offset was reinstalled by deleting the old configuration first.
+- **Decommissioning coverage.** Cover any outstanding `pendingDeficit` first, then `removeCoveredSpokes`, then `removeSlashingConfigs`. An unlisted `spoke` keeps its `deficitOffset` and `pendingDeficit` for a possible re-listing, but `coverPendingDeficit` only works while the `spoke` is listed. Settling a leftover `pendingDeficit` therefore means listing the `spoke` again.
 
-`addCoveredSpokes` also reverts with `UmbrellaNotListedOnHub` unless `UmbrellaSpoke` is itself a listed `spoke` of the pair, since the coverage runs through the `Hub` as described below.
+`addCoveredSpokes` also reverts with `UmbrellaNotListedOnHub` unless `UmbrellaSpoke` is itself a listed `spoke` of the pair, since the coverage runs through the `Hub`.
 
 ### Deficit elimination on a `Hub`
 
 A `Pool` burns `aToken`s through `eliminateReserveDeficit`. A `Hub` has no such entry point, so `UmbrellaSpoke` covers a deficit from its own `spoke` position:
 
-1. The underlying is pulled from `msg.sender` straight to the `hub` — `Hub.add()` expects the transfer to have happened already.
+1. The underlying is pulled from `msg.sender` straight to the `hub`, since `Hub.add()` expects the transfer to have happened already.
 2. `add()` mints added shares to `Umbrella`, rounding the amount down.
-3. The amount to eliminate is derived back from those shares with `previewRemoveByShares`, so it is never more than what was transferred and the elimination never needs more shares than were just minted.
-4. `eliminateDeficit()` burns them against the `spoke`'s deficit and reports how much was actually eliminated. That reported amount, not the amount paid, is what `Umbrella` discounts from `pendingDeficit` or `deficitOffset`.
+3. `previewRemoveByShares` derives the amount to eliminate back from those shares. It is never more than what was transferred, so the elimination never needs more shares than were just minted.
+4. `eliminateDeficit()` burns them against the `spoke`'s deficit and reports how much it eliminated. That reported amount, not the amount paid, is what `Umbrella` discounts from `pendingDeficit` or `deficitOffset`.
 
-This requires `UmbrellaSpoke` to be an active `spoke` of every covered `hub` and `assetId` pair and to hold the `Hub`'s deficit eliminator role. Rounding, or a deficit that was partly eliminated by someone else in the meantime, can leave a few wei of added shares behind on the `hub`; `withdrawStrandedFunds` sends them to the `SLASHED_FUNDS_RECIPIENT`.
+This requires `UmbrellaSpoke` to be an active `spoke` of every covered `hub` and `assetId` pair and to hold the `Hub`'s deficit eliminator role. Rounding, or a deficit someone else partly eliminated in the meantime, can leave a few wei of added shares behind on the `hub`. `withdrawStrandedFunds` sends them to the `SLASHED_FUNDS_RECIPIENT`.
 
 ### V4 limitations and properties
 
-- As in V3, only single-asset slashing is enabled: `slash` requires exactly one `SlashingConfig` on the pair and reverts with `NotImplemented` otherwise. A pair sitting at two configurations is therefore a transient state, and going back down to one does not reinstall any `deficitOffset` — the same gap V3 has.
+- As in V3, only single-asset slashing is enabled: `slash` requires exactly one `SlashingConfig` on the pair and reverts with `NotImplemented` otherwise. Two configurations on a pair is therefore a transient state, and going back down to one does not reinstall any `deficitOffset`. V3 has the same gap.
 - The `StakeToken` underlying must have the same number of decimals as the covered `hub` asset, and a given `StakeToken` cannot be configured for more than one `hub` and `assetId` pair.
 - `getTotalDeficitOffset`, `getTotalPendingDeficit` and `getTotalSlashableDeficit` iterate the listed `spoke`s of a pair, so their cost grows with their number. They are meant for off-chain reads.
 - A `spoke` deficit is read from the `Hub` rounded up, the same way the `Hub` itself converts it when eliminating, so the offset taken over on listing is never short by a wei.

@@ -12,8 +12,8 @@ import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
 /**
  * @title UmbrellaBase
  * @notice This abstract contract provides the access control, roles and rescue mechanics shared by every
- * `Umbrella` version. It holds no storage of its own, so the version specific contracts inheriting it
- * remain free to lay out their own namespaced storage.
+ * `Umbrella` version. It holds no storage of its own, so each version inheriting it defines its own
+ * namespaced storage.
  * @author BGD labs
  */
 abstract contract UmbrellaBase is

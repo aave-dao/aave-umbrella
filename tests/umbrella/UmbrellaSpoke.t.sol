@@ -446,7 +446,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getPendingDeficit(address(hub), ASSET_18_DECIMALS, spokeA), 1_000 * 1e18);
   }
 
-  /// @dev The asset and the stake underlying are priced independently, the slashed amount follows their ratio
+  /// @dev The asset and the stake underlying are priced independently, so the slashed amount follows their ratio
   function test_slashWithDifferentPrices() public {
     _updateSlashingConfigs(
       _slashingConfigs(

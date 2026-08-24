@@ -22,7 +22,7 @@ import {UmbrellaStkManager} from './UmbrellaStkManager.sol';
  * It facilitates deficit coverage through direct contributions and incorporates slashing functionality to address deficits by slashing umbrella stake tokens.
  * The contract supports only single-asset slashing in the current version.
  * @dev Deficit is covered by adding liquidity to the `Hub` and immediately removing the resulting shares through
- * `eliminateDeficit`. Therefore this contract should be listed as an active `spoke` of every covered `hub` and
+ * `eliminateDeficit`. This contract must therefore be listed as an active `spoke` of every covered `hub` and
  * `assetId` pair and be authorized to call `Hub.eliminateDeficit()`.
  * @author BGD labs
  */
@@ -195,15 +195,14 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     uint256 addedShares = IHub(hub).add(assetId, amount);
 
     // `add()` mints shares rounding the assets amount down, while `eliminateDeficit()` burns them rounding it up.
-    // Therefore the amount to eliminate is derived back from the received shares, which is never greater than
-    // the transferred `amount`, so that the elimination never requires more shares than the ones just added.
+    // Deriving the amount to eliminate back from the received shares gives a value never greater than the
+    // transferred `amount`, so the elimination never requires more shares than the ones just added.
     uint256 eliminableAmount = IHub(hub).previewRemoveByShares(assetId, addedShares);
     (, uint256 eliminatedAmount) = IHub(hub).eliminateDeficit(assetId, eliminableAmount, spoke);
 
-    // If for some reason there is dust left in a form of added shares inside the `Hub` (for example, the deficit
-    // is less than we tried to cover, due to some desynchronization problems), then this dust will be reused
-    // during the next coverage. However, we must not count it into the amount value for changing the deficit set
-    // in Umbrella, otherwise Umbrella will think that there is a deficit when in fact it's fully eliminated.
+    // Dust can be left as added shares inside the `Hub`, e.g. if the deficit turned out to be smaller than the
+    // amount covered. It is reused by the next coverage, but must not be discounted from the deficit tracked
+    // here, otherwise `Umbrella` would keep a deficit which is in fact fully eliminated.
 
     return eliminatedAmount;
   }
