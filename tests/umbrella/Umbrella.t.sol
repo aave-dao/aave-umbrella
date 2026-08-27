@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessControl.sol';
 
+import {IUmbrellaBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaBase.sol';
 import {IUmbrella} from '../../src/contracts/umbrella/interfaces/IUmbrella.sol';
 import {IRewardsStructs} from '../../src/contracts/rewards/interfaces/IRewardsStructs.sol';
 import {IUmbrellaStkManager} from '../../src/contracts/umbrella/interfaces/IUmbrellaStkManager.sol';
@@ -98,7 +99,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
 
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.TooMuchDeficitOffsetReduction.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.TooMuchDeficitOffsetReduction.selector));
     umbrella.setDeficitOffset(address(underlying6Decimals), amount);
   }
 
@@ -443,7 +444,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
 
     underlying6Decimals.approve(address(umbrella), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     umbrella.coverDeficitOffset(address(underlying6Decimals), 5_00 * 1e6);
   }
 
@@ -477,7 +478,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
     deal(address(underlying6Decimals), defaultAdmin, 1_000 * 1e6);
     underlying6Decimals.approve(address(umbrella), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     umbrella.coverPendingDeficit(address(underlying6Decimals), 0);
   }
 
@@ -516,7 +517,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
     deal(address(underlying6Decimals), defaultAdmin, 1_000 * 1e6);
     underlying6Decimals.approve(address(umbrella), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     umbrella.coverPendingDeficit(address(underlying6Decimals), 1_000 * 1e6);
   }
 
@@ -555,7 +556,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
     deal(address(underlying6Decimals), defaultAdmin, 1_000 * 1e6);
     underlying6Decimals.approve(address(umbrella), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     umbrella.coverPendingDeficit(address(underlying6Decimals), 0);
   }
 
@@ -792,7 +793,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
 
     assertEq(stakeWith6Decimals.totalAssets(), 10_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(underlying6Decimals));
   }
 
@@ -831,7 +832,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
     umbrella.removeSlashingConfigs(removalPairs);
     vm.stopPrank();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(underlying6Decimals));
   }
 
@@ -879,7 +880,7 @@ contract Umbrella_Test is UmbrellaBaseTest {
 
     pool.addReserveDeficit(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(underlying6Decimals));
   }
 

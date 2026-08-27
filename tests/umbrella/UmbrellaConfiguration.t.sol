@@ -5,6 +5,7 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 
 import {UmbrellaBaseTest} from './utils/UmbrellaBase.t.sol';
 
+import {IUmbrellaConfigurationBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationBase.sol';
 import {IUmbrellaConfiguration} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfiguration.sol';
 import {Umbrella, IPool} from '../../src/contracts/umbrella/Umbrella.sol';
 
@@ -78,10 +79,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    IUmbrellaConfiguration.SlashingConfig memory config6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig memory config6Decimals = umbrella
       .getReserveSlashingConfig(address(underlying6Decimals), address(stakeWith6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfig memory config18Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig memory config18Decimals = umbrella
       .getReserveSlashingConfig(address(underlying18Decimals), address(stakeWith18Decimals));
 
     assertEq(config6Decimals.umbrellaStake, address(stakeWith6Decimals));
@@ -92,10 +93,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     assertEq(config18Decimals.umbrellaStakeUnderlyingOracle, oracle);
     assertEq(config18Decimals.liquidationFee, 0);
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs6Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs18Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs18Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying18Decimals));
 
     assertEq(configs6Decimals[0].umbrellaStake, config6Decimals.umbrellaStake);
@@ -151,7 +152,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     });
 
     vm.startPrank(defaultAdmin);
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
   }
 
@@ -167,7 +168,9 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
     });
 
     vm.startPrank(defaultAdmin);
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidLiquidationFee.selector));
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidLiquidationFee.selector)
+    );
     umbrella.updateSlashingConfigs(stakeSetups);
   }
 
@@ -184,7 +187,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     vm.startPrank(defaultAdmin);
     vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfiguration.InvalidNumberOfDecimals.selector)
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidNumberOfDecimals.selector)
     );
     umbrella.updateSlashingConfigs(stakeSetups);
   }
@@ -204,7 +207,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       umbrellaStakeUnderlyingOracle: oracle
     });
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
 
     stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
@@ -214,7 +217,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       umbrellaStakeUnderlyingOracle: oracle
     });
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
 
     stakeSetups[0] = IUmbrellaConfiguration.SlashingConfigUpdate({
@@ -224,7 +227,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       umbrellaStakeUnderlyingOracle: address(0)
     });
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
   }
 
@@ -243,7 +246,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       umbrellaStakeUnderlyingOracle: oracle
     });
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidOraclePrice.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidOraclePrice.selector));
     umbrella.updateSlashingConfigs(stakeSetups);
 
     pool.switchReserve();
@@ -299,10 +302,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     umbrella.removeSlashingConfigs(removalPairs);
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs6Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs18Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs18Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying18Decimals));
 
     assertEq(configs6Decimals.length, 0);
@@ -321,10 +324,10 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_removeSlashingConfigsUnexestingConfig() public {
-    IUmbrellaConfiguration.SlashingConfig[] memory configs6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs6Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying6Decimals));
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs18Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs18Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying18Decimals));
 
     assertEq(configs6Decimals.length, 0);
@@ -442,7 +445,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   function test_invalidInit() public {
     Umbrella umbrellaImpl = new Umbrella();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella = Umbrella(
       transparentProxyFactory.create(
         address(umbrellaImpl),
@@ -458,7 +461,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella = Umbrella(
       transparentProxyFactory.create(
         address(umbrellaImpl),
@@ -474,7 +477,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella = Umbrella(
       transparentProxyFactory.create(
         address(umbrellaImpl),
@@ -490,7 +493,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella = Umbrella(
       transparentProxyFactory.create(
         address(umbrellaImpl),
@@ -506,7 +509,7 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella = Umbrella(
       transparentProxyFactory.create(
         address(umbrellaImpl),
@@ -524,11 +527,13 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
   }
 
   function test_getSlashingConfigsOrPrice() public {
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ConfigurationNotExist.selector));
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.ConfigurationDoesNotExist.selector)
+    );
     umbrella.getReserveSlashingConfig(address(underlying6Decimals), address(stakeWith6Decimals));
 
     vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfiguration.ConfigurationHasNotBeenSet.selector)
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.ConfigurationHasNotBeenSet.selector)
     );
     umbrella.latestUnderlyingAnswer(address(stakeWith18Decimals));
   }
@@ -576,14 +581,14 @@ contract Umbrella_Configuration_Test is UmbrellaBaseTest {
 
     umbrella.updateSlashingConfigs(stakeSetups);
 
-    IUmbrellaConfiguration.SlashingConfig memory config6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig memory config6Decimals = umbrella
       .getReserveSlashingConfig(address(underlying6Decimals), address(stakeWith6Decimals));
 
     assertEq(config6Decimals.umbrellaStake, address(stakeWith6Decimals));
     assertEq(config6Decimals.umbrellaStakeUnderlyingOracle, oracle);
     assertEq(config6Decimals.liquidationFee, 0);
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs6Decimals = umbrella
       .getReserveSlashingConfigs(address(underlying6Decimals));
 
     assertEq(configs6Decimals[0].umbrellaStake, config6Decimals.umbrellaStake);

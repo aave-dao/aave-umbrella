@@ -3,9 +3,9 @@ pragma solidity ^0.8.0;
 
 import {ITransparentProxyFactory} from 'solidity-utils/contracts/transparent-proxy/interfaces/ITransparentProxyFactory.sol';
 
-import {IUmbrellaConfiguration} from './IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from './IUmbrellaConfigurationBase.sol';
 
-interface IUmbrellaStkManager is IUmbrellaConfiguration {
+interface IUmbrellaStkManager is IUmbrellaConfigurationBase {
   struct StakeTokenSetup {
     /// @notice Address of the underlying token for which the `UmbrellaStakeToken` will be created
     address underlying;

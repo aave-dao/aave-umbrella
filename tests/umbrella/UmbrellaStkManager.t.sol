@@ -7,7 +7,7 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 import {UmbrellaBaseTest} from './utils/UmbrellaBase.t.sol';
 
 import {IUmbrellaStkManager} from '../../src/contracts/umbrella/interfaces/IUmbrellaStkManager.sol';
-import {IUmbrellaConfiguration} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationBase.sol';
 
 import {StakeToken} from '../../src/contracts/stakeToken/StakeToken.sol';
 import {UmbrellaStakeToken} from '../../src/contracts/stakeToken/UmbrellaStakeToken.sol';
@@ -87,9 +87,12 @@ contract Umbrella_StkManager_Test is UmbrellaBaseTest {
       suffix: 'V1'
     });
 
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
+    umbrella.predictStakeTokensAddresses(stakeSetups);
+
     vm.startPrank(defaultAdmin);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.createStakeTokens(stakeSetups);
   }
 
@@ -323,13 +326,13 @@ contract Umbrella_StkManager_Test is UmbrellaBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.setCooldownStk(cooldownSetups);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.setUnstakeWindowStk(unstakeWindowSetups);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.emergencyTokenTransferStk(
       address(unusedStake),
       address(underlying6Decimals),
@@ -337,13 +340,13 @@ contract Umbrella_StkManager_Test is UmbrellaBaseTest {
       0
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.emergencyEtherTransferStk(address(unusedStake), address(this), 0);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.pauseStk(address(unusedStake));
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     umbrella.unpauseStk(address(unusedStake));
   }
 

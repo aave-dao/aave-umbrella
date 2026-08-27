@@ -14,16 +14,17 @@ import {SafeERC20} from 'openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 import {IUmbrella} from './interfaces/IUmbrella.sol';
 import {IUmbrellaStakeToken} from '../stakeToken/interfaces/IUmbrellaStakeToken.sol';
 
+import {UmbrellaConfiguration} from './UmbrellaConfiguration.sol';
 import {UmbrellaStkManager} from './UmbrellaStkManager.sol';
 
 /**
  * @title Umbrella
- * @notice This contract provides mechanisms for managing and resolving reserve deficits within the Aave protocol.
+ * @notice This contract provides mechanisms for managing and resolving reserve deficits within the Aave V3 protocol.
  * It facilitates deficit coverage through direct contributions and incorporates slashing functionality to address deficits by slashing umbrella stake tokens.
  * The contract supports only single-asset slashing in the current version.
  * @author BGD labs
  */
-contract Umbrella is UmbrellaStkManager, IUmbrella {
+contract Umbrella is UmbrellaConfiguration, UmbrellaStkManager, IUmbrella {
   using Math for uint256;
   using SafeERC20 for IERC20;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
@@ -39,13 +40,8 @@ contract Umbrella is UmbrellaStkManager, IUmbrella {
     address umbrellaStakeTokenImpl,
     address transparentProxyFactory
   ) external virtual initializer {
-    __UmbrellaStkManager_init(
-      pool,
-      governance,
-      slashedFundsRecipient,
-      umbrellaStakeTokenImpl,
-      transparentProxyFactory
-    );
+    __UmbrellaStkManager_init(governance, umbrellaStakeTokenImpl, transparentProxyFactory);
+    __UmbrellaConfiguration_init(pool, slashedFundsRecipient);
   }
 
   /// @inheritdoc IUmbrella
