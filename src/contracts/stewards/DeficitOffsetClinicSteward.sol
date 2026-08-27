@@ -10,7 +10,7 @@ import {AccessControl} from 'openzeppelin-contracts/contracts/access/AccessContr
 import {RescuableBase, IRescuableBase} from 'solidity-utils/contracts/utils/RescuableBase.sol';
 import {RescuableACL, IRescuable} from 'solidity-utils/contracts/utils/RescuableACL.sol';
 
-import {IUmbrellaV3} from '../umbrella/interfaces/IUmbrellaV3.sol';
+import {IUmbrella} from '../umbrella/interfaces/IUmbrella.sol';
 
 import {IDeficitOffsetClinicSteward} from './interfaces/IDeficitOffsetClinicSteward.sol';
 
@@ -32,7 +32,7 @@ contract DeficitOffsetClinicSteward is AccessControl, RescuableACL, IDeficitOffs
 
   bytes32 public constant FINANCE_COMMITTEE_ROLE = keccak256('FINANCE_COMITTEE_ROLE');
 
-  IUmbrellaV3 public immutable UMBRELLA;
+  IUmbrella public immutable UMBRELLA;
   address public immutable TREASURY;
   IPool public immutable POOL;
 
@@ -45,7 +45,7 @@ contract DeficitOffsetClinicSteward is AccessControl, RescuableACL, IDeficitOffs
       ZeroAddress()
     );
 
-    UMBRELLA = IUmbrellaV3(umbrella);
+    UMBRELLA = IUmbrella(umbrella);
     TREASURY = treasury;
 
     POOL = IPool(UMBRELLA.POOL());

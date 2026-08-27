@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 import {IUmbrellaConfigurationV4} from './IUmbrellaConfigurationV4.sol';
-import {IUmbrella} from './IUmbrella.sol';
+import {IUmbrellaBase} from './IUmbrellaBase.sol';
 
-interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
+interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   /**
    * @notice Event is emitted whenever the `deficitOffset` of a `spoke` is covered on some amount.
    * @param hub `Hub` to which the `spoke` is connected
@@ -94,8 +94,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
    * @notice Sets a new `deficitOffset` value for this `spoke`.
    * @dev `deficitOffset` can be increased arbitrarily by a value exceeding `spokeDeficit - pendingDeficit`.
    * It can also be decreased, but not less than the same value `spokeDeficit - pendingDeficit`.
-   * `deficitOffset` can only be changed for a `spoke` listed in the coverage of a `hub` and `assetId` pair
-   * that has at least 1 `SlashingConfig` setup.
+   * `deficitOffset` can only be changed for a `spoke` covered by a `hub` and `assetId` pair.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -127,7 +126,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
   /**
    * @notice Pulls funds to resolve the `pendingDeficit` of a `spoke` **up to** specified amount.
    * @dev If the amount exceeds the existing `pendingDeficit`, only the `pendingDeficit` will be eliminated.
-   * Reverts if the `spoke` is not listed in the coverage of this `hub` and `assetId` pair.
+   * Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -144,7 +143,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
   /**
    * @notice Pulls funds to resolve the `deficitOffset` of a `spoke` **up to** specified amount.
    * @dev If the amount exceeds the existing `deficitOffset`, only the `deficitOffset` will be eliminated.
-   * Reverts if the `spoke` is not listed in the coverage of this `hub` and `assetId` pair.
+   * Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -184,8 +183,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrella {
   /**
    * @notice Performs a slashing to cover **up to** the new deficit reported by a `spoke`,
    * i.e. `spokeDeficit - (pendingDeficit + deficitOffset)`.
-   * @dev Reverts if the `spoke` is not listed in the coverage of this `hub` and `assetId` pair.
-   * A deficit reported by any other `spoke` of the same `hub` and `assetId` pair is neither tracked nor covered.
+   * @dev Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`

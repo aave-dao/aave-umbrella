@@ -7,7 +7,7 @@ import {Roles} from 'aave-v4/deployments/utils/libraries/Roles.sol';
 
 import {UmbrellaSpokeE2EBaseTest} from './utils/UmbrellaSpokeE2EBase.t.sol';
 
-import {IUmbrella} from '../../src/contracts/umbrella/interfaces/IUmbrella.sol';
+import {IUmbrellaBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaBase.sol';
 import {IUmbrellaConfigurationV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV4.sol';
 import {IUmbrellaV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaV4.sol';
 
@@ -384,7 +384,7 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     _coverSpoke(address(lendingSpoke));
     _fundCoverageManager(1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverDeficitOffset(address(hub), assetId, address(lendingSpoke), 1_000 * 1e6);
   }

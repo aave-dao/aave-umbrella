@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IUmbrellaStkManager} from '../umbrella/interfaces/IUmbrellaStkManager.sol';
-import {IUmbrellaConfigurationV3} from '../umbrella/interfaces/IUmbrellaConfigurationV3.sol';
+import {IUmbrellaConfiguration} from '../umbrella/interfaces/IUmbrellaConfiguration.sol';
 
 import {IRewardsStructs} from '../rewards/interfaces/IRewardsStructs.sol';
 

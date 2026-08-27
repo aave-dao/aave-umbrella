@@ -6,7 +6,7 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 import {UmbrellaSpokeBaseTest} from './utils/UmbrellaSpokeBase.t.sol';
 import {MockHub} from './utils/mocks/MockHub.sol';
 
-import {IUmbrella} from '../../src/contracts/umbrella/interfaces/IUmbrella.sol';
+import {IUmbrellaBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaBase.sol';
 import {IUmbrellaConfigurationV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV4.sol';
 import {IUmbrellaV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaV4.sol';
 
@@ -77,7 +77,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
     _setUpDefaultCoverage();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.TooMuchDeficitOffsetReduction.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.TooMuchDeficitOffsetReduction.selector));
     vm.prank(defaultAdmin);
     umbrella.setDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, amount);
   }
@@ -93,7 +93,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
 
     assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 600 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.TooMuchDeficitOffsetReduction.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.TooMuchDeficitOffsetReduction.selector));
     vm.prank(defaultAdmin);
     umbrella.setDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 600 * 1e6 - 1);
   }
@@ -197,7 +197,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
 
     umbrella.setPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 1e6);
   }
@@ -206,7 +206,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     _setUpDefaultCoverage();
     _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 500 * 1e6);
   }
@@ -215,7 +215,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
     _setUpDefaultCoverage();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 0);
   }
@@ -265,7 +265,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     _setUpDefaultCoverage();
     _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
   }
@@ -273,7 +273,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
   function test_coverPendingDeficitZeroAmount() public {
     _setUpSlashedSpoke(1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 0);
   }
@@ -324,7 +324,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
   function test_coverSpokeDeficitZeroDeficit() public {
     _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.ZeroDeficitToCover.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.ZeroDeficitToCover.selector));
     vm.prank(defaultAdmin);
     umbrella.coverSpokeDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
   }
@@ -501,6 +501,32 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
   }
 
+  /// @dev The `liquidationFee` is applied rounding up, so that the fee is never short by a wei
+  function test_slashRoundsLiquidationFeeUp() public {
+    _updateSlashingConfigs(
+      _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals), 1)
+    );
+    _listAndCoverSpoke(address(hub), ASSET_6_DECIMALS, spokeA);
+    _fillStake(address(stakeWith6Decimals), 30_000 * 1e6);
+
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000_001);
+
+    // 1 bps of 1_000_001 is 100.0001
+    vm.expectEmit(address(umbrella));
+    emit IUmbrellaV4.StakeTokenSlashed(
+      address(hub),
+      ASSET_6_DECIMALS,
+      spokeA,
+      address(stakeWith6Decimals),
+      1_000_001,
+      101
+    );
+
+    umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
+
+    assertEq(underlying6Decimals.balanceOf(collector), 1_000_001 + 101);
+  }
+
   function test_slashWithNonZeroLiquidationFeeExceedingStake(uint256 liquidationFee) public {
     liquidationFee = bound(liquidationFee, 1, 10_000);
 
@@ -525,7 +551,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     _setUpDefaultCoverage();
     _fillStake(address(stakeWith6Decimals), 10_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
   }
 
@@ -535,7 +561,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
 
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeB, 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeB);
   }
 
@@ -554,7 +580,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     );
     vm.stopPrank();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
   }
 
@@ -568,7 +594,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
 
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
   }
 
@@ -587,7 +613,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
 
     // and a repeated slashing has nothing left to slash
-    vm.expectRevert(abi.encodeWithSelector(IUmbrella.CannotSlash.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaBase.CannotSlash.selector));
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
   }
 

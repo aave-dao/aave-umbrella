@@ -7,7 +7,7 @@ import {Pausable} from 'openzeppelin-contracts/contracts/utils/Pausable.sol';
 import {ISlashingRobot, IAutomation} from './interfaces/ISlashingRobot.sol';
 
 import {IUmbrellaStakeToken} from '../stakeToken/interfaces/IUmbrellaStakeToken.sol';
-import {IUmbrellaV3} from '../umbrella/interfaces/IUmbrellaV3.sol';
+import {IUmbrella} from '../umbrella/interfaces/IUmbrella.sol';
 
 /**
  * @title SlashingRobot
@@ -40,12 +40,12 @@ contract SlashingRobot is Ownable, ISlashingRobot {
    * @dev run off-chain, checks if reserves should be slashed
    */
   function checkUpkeep(bytes memory) public view virtual override returns (bool, bytes memory) {
-    address[] memory stkTokens = _shuffleAddresses(IUmbrellaV3(UMBRELLA).getStkTokens());
+    address[] memory stkTokens = _shuffleAddresses(IUmbrella(UMBRELLA).getStkTokens());
     address[] memory reservesToSlash = new address[](stkTokens.length);
     uint256 slashCount;
 
     for (uint256 i; i < stkTokens.length; ++i) {
-      IUmbrellaV3.StakeTokenData memory stakeTokenData = IUmbrellaV3(UMBRELLA).getStakeTokenData(
+      IUmbrella.StakeTokenData memory stakeTokenData = IUmbrella(UMBRELLA).getStakeTokenData(
         stkTokens[i]
       );
 
@@ -87,7 +87,7 @@ contract SlashingRobot is Ownable, ISlashingRobot {
         continue;
       }
 
-      try IUmbrellaV3(UMBRELLA).slash(reserves[i]) returns (uint256 amount) {
+      try IUmbrella(UMBRELLA).slash(reserves[i]) returns (uint256 amount) {
         slashingPerformed = true;
 
         emit ReserveSlashed(reserves[i], amount);
@@ -133,7 +133,7 @@ contract SlashingRobot is Ownable, ISlashingRobot {
       return false;
     }
 
-    (bool isSlashable, ) = IUmbrellaV3(UMBRELLA).isReserveSlashable(reserve);
+    (bool isSlashable, ) = IUmbrella(UMBRELLA).isReserveSlashable(reserve);
     return isSlashable;
   }
 

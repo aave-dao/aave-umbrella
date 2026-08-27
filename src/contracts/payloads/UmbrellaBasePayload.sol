@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {Address} from 'openzeppelin-contracts/contracts/utils/Address.sol';
 
 import {IUmbrellaEngineStructs as IStructs} from './IUmbrellaEngineStructs.sol';
-import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfigurationV3 as ICStructs} from './IUmbrellaEngineStructs.sol';
+import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfiguration as ICStructs} from './IUmbrellaEngineStructs.sol';
 
 import {IUmbrellaConfigEngine as IEngine} from './configEngine/IUmbrellaConfigEngine.sol';
 

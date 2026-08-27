@@ -86,6 +86,7 @@ abstract contract UmbrellaSpokeBaseTest is Test {
   bytes32 public constant COVERAGE_MANAGER_ROLE = keccak256('COVERAGE_MANAGER_ROLE');
   bytes32 public constant RESCUE_GUARDIAN_ROLE = keccak256('RESCUE_GUARDIAN_ROLE');
   bytes32 public constant PAUSE_GUARDIAN_ROLE = keccak256('PAUSE_GUARDIAN_ROLE');
+  bytes32 public constant SPOKE_COVERAGE_MANAGER_ROLE = keccak256('SPOKE_COVERAGE_MANAGER_ROLE');
   bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
 
   function setUp() public virtual {

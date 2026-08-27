@@ -7,7 +7,7 @@ import {AccessControlUpgradeable} from 'openzeppelin-contracts-upgradeable/contr
 import {RescuableBase, IRescuableBase} from 'solidity-utils/contracts/utils/RescuableBase.sol';
 import {RescuableACL} from 'solidity-utils/contracts/utils/RescuableACL.sol';
 
-import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from './interfaces/IUmbrellaConfigurationBase.sol';
 
 /**
  * @title UmbrellaBase
@@ -20,13 +20,11 @@ abstract contract UmbrellaBase is
   RescuableACL,
   Initializable,
   AccessControlUpgradeable,
-  IUmbrellaConfiguration
+  IUmbrellaConfigurationBase
 {
   bytes32 public constant COVERAGE_MANAGER_ROLE = keccak256('COVERAGE_MANAGER_ROLE');
   bytes32 public constant RESCUE_GUARDIAN_ROLE = keccak256('RESCUE_GUARDIAN_ROLE');
   bytes32 public constant PAUSE_GUARDIAN_ROLE = keccak256('PAUSE_GUARDIAN_ROLE');
-
-  uint256 internal constant ONE_HUNDRED_PERCENT = 1e4;
 
   function __UmbrellaBase_init(address superAdmin) internal onlyInitializing {
     require(superAdmin != address(0), ZeroAddress());

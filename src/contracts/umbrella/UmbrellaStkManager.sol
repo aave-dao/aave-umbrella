@@ -53,10 +53,10 @@ abstract contract UmbrellaStkManager is UmbrellaBase, IUmbrellaStkManager {
     address umbrellaStakeTokenImpl,
     address transparentProxyFactory
   ) internal onlyInitializing {
+    __UmbrellaBase_init(superAdmin);
+
     require(
-      transparentProxyFactory != address(0) &&
-        umbrellaStakeTokenImpl != address(0) &&
-        superAdmin != address(0),
+      transparentProxyFactory != address(0) && umbrellaStakeTokenImpl != address(0),
       ZeroAddress()
     );
 

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {IUmbrellaConfiguration} from './IUmbrellaConfiguration.sol';
+import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
+import {EnumerableSet} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol';
 
-interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
+import {IUmbrellaConfigurationBase} from './IUmbrellaConfigurationBase.sol';
+
+interface IUmbrellaConfigurationV4 is IUmbrellaConfigurationBase {
   struct SlashingConfigUpdate {
     /// @notice `Hub` which configuration should be updated
     address hub;
@@ -14,7 +17,6 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
     /// @notice Percentage of funds slashed on top of the new deficit
     uint256 liquidationFee;
     /// @notice Oracle of the `hub` asset which deficit is covered
-    /// @dev Shared by every `SlashingConfig` of this `hub` and `assetId` pair. The last update wins
     address assetOracle;
     /// @notice Oracle of `UmbrellaStakeToken`s underlying
     address umbrellaStakeUnderlyingOracle;
@@ -40,15 +42,34 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
 
   struct StakeTokenData {
     /// @notice Oracle for pricing an underlying assets of `UmbrellaStakeToken`
-    /// @dev Remains after removal of `SlashingConfig`
     address underlyingOracle;
+    /// @notice Whether the `SlashingConfig` of this `UmbrellaStakeToken` has been removed
+    bool deactivated;
+    /// @notice Oracle for pricing the `hub` asset which deficit is covered
+    address assetOracle;
     /// @notice `Hub` for which this `UmbrellaStakeToken` is configured
-    /// @dev Will be deleted after removal of `SlashingConfig`
     address hub;
     /// @notice Id of the `hub` asset for which this `UmbrellaStakeToken` is configured
-    /// @dev Will be deleted after removal of `SlashingConfig`.
-    /// Narrowed to `uint96`, so that it shares a storage slot with `hub` and both are cleared together
+    /// @dev Narrowed to `uint96`, so that it shares a storage slot with `hub`
     uint96 assetId;
+  }
+
+  struct SpokeData {
+    /// @notice Initial deficit (cannot be covered by funds taken from Umbrella users)
+    uint256 deficitOffset;
+    /// @notice Deficit on top of `deficitOffset` (already slashed and waiting to be covered by Umbrella)
+    uint256 pendingDeficit;
+    /// @notice Whether the `spoke` has been removed from the coverage of its `hub` and `assetId` pair
+    bool deactivated;
+  }
+
+  struct AssetData {
+    /// @notice Map with `UmbrellaStakeToken`s for this `hub` and `assetId` pair and their `liquidationFee`
+    EnumerableMap.AddressToUintMap configurationMap;
+    /// @notice Set of `spoke`s ever listed in the coverage of this `hub` and `assetId` pair
+    EnumerableSet.AddressSet listedSpokes;
+    /// @notice Map of `spoke` addresses and their tracked deficit
+    mapping(address spoke => SpokeData) spokesData;
   }
 
   /**
@@ -57,6 +78,7 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
    * @param assetId Id of the `hub` asset which configuration is changed
    * @param umbrellaStake Address of `UmbrellaStakeToken`
    * @param liquidationFee Percentage of funds slashed on top of the deficit
+   * @param assetOracle Oracle of the `hub` asset which deficit is covered
    * @param umbrellaStakeUnderlyingOracle `UmbrellaStakeToken` underlying oracle address
    */
   event SlashingConfigurationChanged(
@@ -64,19 +86,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
     uint256 indexed assetId,
     address indexed umbrellaStake,
     uint256 liquidationFee,
+    address assetOracle,
     address umbrellaStakeUnderlyingOracle
-  );
-
-  /**
-   * @notice Event is emitted whenever the oracle of a covered asset is set.
-   * @param hub `Hub` which asset oracle is changed
-   * @param assetId Id of the `hub` asset which oracle is changed
-   * @param assetOracle Oracle of the `hub` asset which deficit is covered
-   */
-  event AssetOracleChanged(
-    address indexed hub,
-    uint256 indexed assetId,
-    address indexed assetOracle
   );
 
   /**
@@ -141,11 +152,6 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   error UmbrellaStakeAlreadySetForAnotherAsset();
 
   /**
-   * @dev Attempted to add `hub` to configuration, which isn't a valid `Hub`.
-   */
-  error InvalidHub();
-
-  /**
    * @dev Attempted to add `assetId` to configuration, which doesn't exist in the `Hub`.
    */
   error InvalidAsset();
@@ -173,13 +179,13 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
 
   /**
    * @dev Attempted to remove the last slashing configuration of a `hub` and `assetId` pair that still has
-   * `spoke`s listed in its coverage.
+   * `spoke`s covered.
    */
   error SpokesStillCovered();
 
   /**
-   * @dev Attempted to track, slash or cover a deficit of a `spoke` that is not listed
-   * in the coverage of this `hub` and `assetId` pair.
+   * @dev Attempted to track, slash or cover a deficit of a `spoke` that is not covered
+   * by this `hub` and `assetId` pair.
    */
   error SpokeNotCovered();
 
@@ -190,8 +196,6 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
    * @notice Updates a set of slashing configurations.
    * @dev If the configs contain an already existing configuration, the configuration will be overwritten.
    * If install more than 1 configuration, then `slash` will not work in the current version.
-   * A `spoke` can only be listed once its pair is configured, so installing the first configuration of a pair
-   * neither makes an already reported deficit slashable nor changes any `deficitOffset`.
    * The `umbrellaStake` underlying is expected to be the share token of the `TokenizationSpoke`
    * linked to the same `hub` and `assetId` pair.
    * @param slashingConfigs An array of configurations
@@ -201,31 +205,34 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   /**
    * @notice Removes a set of slashing configurations.
    * @dev If such a config did not exist, the function does not revert.
-   * Reverts if it would leave a `hub` and `assetId` pair without any configuration while `spoke`s are still
-   * listed in its coverage, so a covered `spoke` can never outlive the configuration of its pair.
-   * Removing the last configuration therefore requires `removeCoveredSpokes` to be called first.
+   * Reverts if it would leave a `hub` and `assetId` pair without any configuration while `spoke`s are
+   * still covered, so removing the last configuration requires `removeCoveredSpokes` to be called first.
    * Replacing a configuration should install the new one before removing the old one.
    * @param removalPairs An array of coverage tuples (hub:assetId:stk) to remove
    */
   function removeSlashingConfigs(SlashingConfigRemoval[] calldata removalPairs) external;
 
+  // SPOKE_COVERAGE_MANAGER_ROLE
+  /////////////////////////////////////////////////////////////////////////////////////////
+
   /**
    * @notice Adds a set of `spoke`s to the coverage of their `hub` and `assetId` pair.
-   * @dev Only deficit of a listed `spoke` is tracked and can be slashed or covered.
+   * @dev Only deficit of a covered `spoke` is tracked and can be slashed or covered.
    * On addition the `deficitOffset` of the `spoke` is initialized with its current deficit, so that a deficit
-   * accrued before the listing cannot be slashed. Listing is therefore the only way for a `spoke` deficit to
-   * become slashable, and it requires the pair to already have a slashing configuration.
+   * accrued before the coverage cannot be slashed. This requires the pair to already have a slashing configuration.
    * Reverts unless this `Umbrella` is listed as a `spoke` of the same `hub` and `assetId` pair,
    * as otherwise a slashed deficit could never be eliminated.
-   * If such a `spoke` was already listed, the function does not revert.
+   * If such a `spoke` was already covered, the function does not revert.
    * @param spokes An array of coverage tuples (hub:assetId:spoke) to add
    */
   function addCoveredSpokes(SpokeCoverage[] calldata spokes) external;
 
   /**
    * @notice Removes a set of `spoke`s from the coverage of their `hub` and `assetId` pair.
-   * @dev Once removed, a `spoke` deficit is no longer tracked and can neither be slashed nor covered.
-   * If such a `spoke` was not listed, the function does not revert.
+   * @dev Once removed, a `spoke` is flagged as deactivated and its deficit is no longer tracked,
+   * so it can neither be slashed nor covered. Its `deficitOffset` and `pendingDeficit` are kept,
+   * so that a re-addition of the same `spoke` takes the funds already slashed for it into account.
+   * If such a `spoke` was not covered, the function does not revert.
    * @param spokes An array of coverage tuples (hub:assetId:spoke) to remove
    */
   function removeCoveredSpokes(SpokeCoverage[] calldata spokes) external;
@@ -258,15 +265,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   ) external view returns (SlashingConfig memory);
 
   /**
-   * @notice Returns the oracle used to price the asset which deficit is covered.
-   * @param hub Address of the `Hub`
-   * @param assetId Id of the asset
-   * @return Address of the asset oracle
-   */
-  function getAssetOracle(address hub, uint256 assetId) external view returns (address);
-
-  /**
-   * @notice Returns all the `spoke`s listed in the coverage of a given `hub` and `assetId` pair.
+   * @notice Returns all the `spoke`s currently covered by a given `hub` and `assetId` pair.
+   * @dev Deactivated `spoke`s are not returned.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @return An array of `spoke` addresses
@@ -274,7 +274,7 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   function getCoveredSpokes(address hub, uint256 assetId) external view returns (address[] memory);
 
   /**
-   * @notice Returns whether a `spoke` is listed in the coverage of a given `hub` and `assetId` pair.
+   * @notice Returns whether a `spoke` is covered by a given `hub` and `assetId` pair.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -285,9 +285,11 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   /**
    * @notice Returns if a `spoke` is currently slashable or not.
    * A `spoke` is slashable if:
-   * - it is listed in the coverage of this `hub` and `assetId` pair
-   * - there's only one stk configured for slashing
-   * - if there is a non zero new deficit
+   * - it is covered by this `hub` and `assetId` pair
+   * - the pair has exactly one `SlashingConfig`, since slashing a basket of `UmbrellaStakeToken`s
+   *   is not supported in the current version
+   * - the deficit the `spoke` reports on the `hub` exceeds its `deficitOffset` and `pendingDeficit`,
+   *   i.e. part of it is neither excluded from coverage nor already slashed for
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -327,9 +329,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   ) external view returns (uint256);
 
   /**
-   * @notice Returns the sum of the `deficitOffset` of every `spoke` listed in the coverage of a given `hub` and `assetId` pair.
-   * @dev Iterates over the listed `spoke`s, so the cost grows with their number.
-   * A `spoke` of the same `hub` and `assetId` pair that is not listed contributes nothing.
+   * @notice Returns the sum of the `deficitOffset` of every `spoke` covered by a given `hub` and `assetId` pair.
+   * @dev Iterates over the covered `spoke`s, so the cost grows with their number.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @return The total amount of the `deficitOffset` covered by this pair
@@ -337,9 +338,8 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   function getTotalDeficitOffset(address hub, uint256 assetId) external view returns (uint256);
 
   /**
-   * @notice Returns the sum of the `pendingDeficit` of every `spoke` listed in the coverage of a given `hub` and `assetId` pair.
-   * @dev Iterates over the listed `spoke`s, so the cost grows with their number.
-   * A `spoke` of the same `hub` and `assetId` pair that is not listed contributes nothing.
+   * @notice Returns the sum of the `pendingDeficit` of every `spoke` covered by a given `hub` and `assetId` pair.
+   * @dev Iterates over the covered `spoke`s, so the cost grows with their number.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @return The total amount of funds pending for deficit elimination for this pair
@@ -347,11 +347,10 @@ interface IUmbrellaConfigurationV4 is IUmbrellaConfiguration {
   function getTotalPendingDeficit(address hub, uint256 assetId) external view returns (uint256);
 
   /**
-   * @notice Returns the sum of the new deficit of every `spoke` listed in the coverage of a given `hub` and `assetId` pair,
+   * @notice Returns the sum of the new deficit of every `spoke` covered by a given `hub` and `assetId` pair,
    * i.e. the total amount by which the `UmbrellaStakeToken` of this pair could currently be slashed.
-   * @dev Iterates over the listed `spoke`s and reads the deficit of each one from the `hub`,
+   * @dev Iterates over the covered `spoke`s and reads the deficit of each one from the `hub`,
    * so the cost grows with their number.
-   * A `spoke` of the same `hub` and `assetId` pair that is not listed contributes nothing.
    * Returns 0 unless the pair has exactly one `SlashingConfig`, since slashing is not possible otherwise.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset

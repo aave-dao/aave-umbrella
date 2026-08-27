@@ -230,25 +230,25 @@ A V3 `reserve` is one asset on one `Pool`. In V4 the same position takes three v
 - `assetId`. The id of the asset on that `hub` whose deficit is covered.
 - `spoke`. The `spoke` which reported the deficit. A `Hub` accounts for deficit per `spoke`, so `Umbrella` does too.
 
-`SlashingConfig`s and the oracle of the covered asset are set per `hub` and `assetId` pair, and every `spoke` listed in that pair's coverage shares them. `deficitOffset` and `pendingDeficit` are tracked per `spoke`. A deficit reported by a `spoke` that is not listed is neither slashed nor covered.
+`SlashingConfig`s are set per `hub` and `assetId` pair and shared by every `spoke` that pair covers. `deficitOffset` and `pendingDeficit` are tracked per `spoke`. A deficit reported by a `spoke` that is not covered is neither slashed nor covered.
 
-The price of the covered asset comes from an `assetOracle` configured on `Umbrella` itself, not from the `Pool`'s oracle as in V3. It must report the same number of decimals as the `StakeToken` underlying oracle.
+The price of the covered asset comes from an `assetOracle` stored next to the `StakeToken` underlying oracle in its `StakeTokenData`, not from the `Pool`'s oracle as in V3. Both oracles must report the same number of decimals.
 
 ### Covering a `spoke` takes two steps
 
 1. `updateSlashingConfigs` registers the `StakeToken`, its `liquidationFee` and the oracles for a `hub` and `assetId` pair.
-2. `addCoveredSpokes` lists a `spoke` of that pair and initializes its `deficitOffset` with the deficit it has already reported, so that nothing accrued before the listing can be slashed.
+2. `addCoveredSpokes` covers a `spoke` of that pair and initializes its `deficitOffset` with the deficit it has already reported, so that nothing accrued before can be slashed. It is gated by its own `SPOKE_COVERAGE_MANAGER_ROLE`, unlike the configuration functions which are `DEFAULT_ADMIN_ROLE` only.
 
 `slash` only works once both are done, and step 2 has to be the last of the two. Otherwise a deficit reported while the pair had no configuration would become slashable the moment one is installed. `UmbrellaSpoke` enforces that order instead of relying on the order of a payload:
 
 - `addCoveredSpokes` reverts with `AssetCoverageNotSetup` if the pair has no `SlashingConfig` yet.
-- `removeSlashingConfigs` reverts with `SpokesStillCovered` if removing the last configuration of a pair would leave a `spoke` listed in its coverage.
+- `removeSlashingConfigs` reverts with `SpokesStillCovered` if removing the last configuration of a pair would leave one of its `spoke`s covered.
 
-Together they hold one invariant: a covered `spoke` never outlives the configuration of its pair. `addCoveredSpokes` is therefore the only way a deficit can become slashable. In practice:
+Together they hold one invariant: a covered `spoke` never outlives the configuration of its pair. In practice:
 
 - **Setting up coverage.** Configure the pair first, then list its `spoke`s.
 - **Replacing a `StakeToken`.** Install the new configuration before removing the old one, so the pair is never left unconfigured and its `spoke`s stay covered throughout. This is the reverse of the V3 procedure, where the offset was reinstalled by deleting the old configuration first.
-- **Decommissioning coverage.** Cover any outstanding `pendingDeficit` first, then `removeCoveredSpokes`, then `removeSlashingConfigs`. An unlisted `spoke` keeps its `deficitOffset` and `pendingDeficit` for a possible re-listing, but `coverPendingDeficit` only works while the `spoke` is listed. Settling a leftover `pendingDeficit` therefore means listing the `spoke` again.
+- **Decommissioning coverage.** Cover any outstanding `pendingDeficit` first, then `removeCoveredSpokes`, then `removeSlashingConfigs`. Neither function deletes anything: a `spoke` and a `StakeToken` are only flagged as deactivated, so their tracked state survives. A deactivated `spoke` keeps its `deficitOffset` and `pendingDeficit` for a possible re-addition, but `coverPendingDeficit` only works while the `spoke` is covered. Settling a leftover `pendingDeficit` therefore means covering the `spoke` again.
 
 `addCoveredSpokes` also reverts with `UmbrellaNotListedOnHub` unless `UmbrellaSpoke` is itself a listed `spoke` of the pair, since the coverage runs through the `Hub`.
 
@@ -266,9 +266,9 @@ This requires `UmbrellaSpoke` to be an active `spoke` of every covered `hub` and
 ### V4 limitations and properties
 
 - As in V3, only single-asset slashing is enabled: `slash` requires exactly one `SlashingConfig` on the pair and reverts with `NotImplemented` otherwise. Two configurations on a pair is therefore a transient state, and going back down to one does not reinstall any `deficitOffset`. V3 has the same gap.
-- The `StakeToken` underlying must have the same number of decimals as the covered `hub` asset, and a given `StakeToken` cannot be configured for more than one `hub` and `assetId` pair.
-- `getTotalDeficitOffset`, `getTotalPendingDeficit` and `getTotalSlashableDeficit` iterate the listed `spoke`s of a pair, so their cost grows with their number. They are meant for off-chain reads.
-- A `spoke` deficit is read from the `Hub` rounded up, the same way the `Hub` itself converts it when eliminating, so the offset taken over on listing is never short by a wei.
+- A `StakeToken` cannot be configured for more than one `hub` and `assetId` pair. Removing its configuration only deactivates it, so the binding to its pair holds for good.
+- `getTotalDeficitOffset`, `getTotalPendingDeficit` and `getTotalSlashableDeficit` iterate the `spoke`s a pair has ever covered, so their cost grows with their number. They are meant for off-chain reads.
+- A `spoke` deficit is read from the `Hub` rounded up, the same way the `Hub` itself converts it when eliminating, so the offset taken over is never short by a wei.
 
 <br>
 

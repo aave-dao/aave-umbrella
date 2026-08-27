@@ -9,8 +9,8 @@ import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/exten
 
 import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
 
+import {IUmbrellaConfigurationBase} from './interfaces/IUmbrellaConfigurationBase.sol';
 import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
-import {IUmbrellaConfigurationV3} from './interfaces/IUmbrellaConfigurationV3.sol';
 
 import {UmbrellaBase} from './UmbrellaBase.sol';
 
@@ -20,8 +20,10 @@ import {UmbrellaBase} from './UmbrellaBase.sol';
  * including setting `UmbrellaStakeToken`s, `liquidationFee`s, `underlyingOracle`s for pricing, and tracking deficit.
  * @author BGD labs
  */
-abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV3 {
+abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfiguration {
   using EnumerableMap for EnumerableMap.AddressToUintMap;
+
+  uint256 internal constant ONE_HUNDRED_PERCENT = 1e4;
 
   struct ReserveData {
     /// @notice Map with `UmbrellaStakeToken`s for this reserve and their `liquidationFee`
@@ -72,7 +74,7 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     $.pool = pool;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function updateSlashingConfigs(
     SlashingConfigUpdate[] calldata slashingConfigs
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -81,7 +83,7 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     }
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function removeSlashingConfigs(
     SlashingConfigRemoval[] calldata removalPairs
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -103,14 +105,14 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     }
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function getReserveSlashingConfig(
     address reserve,
     address umbrellaStake
   ) external view returns (SlashingConfig memory) {
     UmbrellaConfigurationStorage storage $ = _getUmbrellaConfigurationStorage();
     (bool exist, uint256 value) = $.reservesData[reserve].configurationMap.tryGet(umbrellaStake);
-    require(exist, ConfigurationNotExist());
+    require(exist, ConfigurationDoesNotExist());
 
     return
       SlashingConfig({
@@ -120,12 +122,12 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
       });
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function getStakeTokenData(address umbrellaStake) external view returns (StakeTokenData memory) {
     return _getUmbrellaConfigurationStorage().stakesData[umbrellaStake];
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationBase
   function latestUnderlyingAnswer(address umbrellaStake) external view returns (int256) {
     address underlyingOracle = _getUmbrellaConfigurationStorage()
       .stakesData[umbrellaStake]
@@ -135,7 +137,7 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     return AggregatorInterface(underlyingOracle).latestAnswer();
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function getReserveSlashingConfigs(
     address reserve
   ) public view returns (SlashingConfig[] memory) {
@@ -156,7 +158,7 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     return configs;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function isReserveSlashable(address reserve) public view returns (bool, uint256) {
     ReserveData storage reserveData = _getUmbrellaConfigurationStorage().reservesData[reserve];
 
@@ -172,27 +174,27 @@ abstract contract UmbrellaConfiguration is UmbrellaBase, IUmbrellaConfigurationV
     return (false, newDeficit);
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function getDeficitOffset(address reserve) public view returns (uint256) {
     return _getUmbrellaConfigurationStorage().reservesData[reserve].deficitOffset;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function getPendingDeficit(address reserve) public view returns (uint256) {
     return _getUmbrellaConfigurationStorage().reservesData[reserve].pendingDeficit;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function POOL_ADDRESSES_PROVIDER() public view returns (IPoolAddressesProvider) {
     return _getUmbrellaConfigurationStorage().poolAddressesProvider;
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationBase
   function SLASHED_FUNDS_RECIPIENT() public view returns (address) {
     return _getUmbrellaConfigurationStorage().slashedFundsRecipient;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV3
+  /// @inheritdoc IUmbrellaConfiguration
   function POOL() public view returns (IPool) {
     return _getUmbrellaConfigurationStorage().pool;
   }

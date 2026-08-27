@@ -32,7 +32,7 @@ methods {
   function getPendingDeficit(address reserve) external returns (uint256) envfree;
   function SLASHED_FUNDS_RECIPIENT() external returns (address) envfree;
   function get_is_virtual_active(address reserve) external returns (bool) envfree;
-  function getReserveSlashingConfigs(address) external returns (IUmbrellaConfiguration.SlashingConfig[]) envfree;
+  function getReserveSlashingConfigs(address) external returns (IUmbrellaConfigurationBase.SlashingConfig[]) envfree;
 
   function erc20A.totalSupply() external returns (uint256) envfree;
   function erc20A.balanceOf(address account) external returns (uint256) envfree;

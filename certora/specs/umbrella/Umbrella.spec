@@ -4,7 +4,7 @@ import "invariants.spec";
 use builtin rule sanity;
 
 rule updateSlashingConfigSanity(env e) {
-    IUmbrellaConfigurationV3.SlashingConfigUpdate[] slashingConfigs;
+    IUmbrellaConfiguration.SlashingConfigUpdate[] slashingConfigs;
     require slashingConfigs.length == 1;
     updateSlashingConfigs(e, slashingConfigs);
     satisfy true;
@@ -222,7 +222,7 @@ rule possible_slashing_amount_cant_be_changed(method f) filtered {f ->
     f.selector != sig:setDeficitOffset(address,uint256).selector
     && f.selector != sig:slash(address).selector
     && f.selector != sig:coverReserveDeficit(address,uint256).selector
-    && f.selector != sig:updateSlashingConfigs(IUmbrellaConfigurationV3.SlashingConfigUpdate[]).selector
+    && f.selector != sig:updateSlashingConfigs(IUmbrellaConfiguration.SlashingConfigUpdate[]).selector
     } {
   env e; address _reserve;
 

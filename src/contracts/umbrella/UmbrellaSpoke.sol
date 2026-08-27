@@ -4,6 +4,8 @@ pragma solidity ^0.8.27;
 import {AggregatorInterface} from 'aave-v3-origin/contracts/dependencies/chainlink/AggregatorInterface.sol';
 
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
+import {MathUtils} from 'aave-v4/libraries/math/MathUtils.sol';
+import {PercentageMath} from 'aave-v4/libraries/math/PercentageMath.sol';
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 
@@ -28,7 +30,9 @@ import {UmbrellaStkManager} from './UmbrellaStkManager.sol';
  */
 contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrellaV4 {
   using Math for uint256;
+  using PercentageMath for uint256;
   using SafeERC20 for IERC20;
+  using {MathUtils.zeroFloorSub} for uint256;
 
   constructor() {
     _disableInitializers();
@@ -40,9 +44,8 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     address umbrellaStakeTokenImpl,
     address transparentProxyFactory
   ) external virtual initializer {
-    __UmbrellaBase_init(governance);
-    __UmbrellaConfigurationV4_init(slashedFundsRecipient);
     __UmbrellaStkManager_init(governance, umbrellaStakeTokenImpl, transparentProxyFactory);
+    __UmbrellaConfigurationV4_init(governance, slashedFundsRecipient);
   }
 
   /// @inheritdoc IUmbrellaV4
@@ -89,9 +92,7 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     uint256 deficitOffset = getDeficitOffset(hub, assetId, spoke);
     uint256 pendingDeficit = getPendingDeficit(hub, assetId, spoke);
 
-    uint256 coverableOffset = spokeDeficit > pendingDeficit
-      ? deficitOffset.min(spokeDeficit - pendingDeficit)
-      : 0;
+    uint256 coverableOffset = deficitOffset.min(spokeDeficit.zeroFloorSub(pendingDeficit));
 
     amount = _coverDeficit(hub, assetId, spoke, amount, coverableOffset);
 
@@ -185,7 +186,7 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     uint256 amount,
     uint256 deficitToCover
   ) internal returns (uint256) {
-    amount = amount <= deficitToCover ? amount : deficitToCover;
+    amount = amount.min(deficitToCover);
     require(amount != 0, ZeroDeficitToCover());
 
     (address underlying, ) = IHub(hub).getAssetUnderlyingAndDecimals(assetId);
@@ -215,11 +216,11 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
     uint256 deficitToCover
   ) internal returns (uint256) {
     uint256 deficitToCoverWithFee = config.liquidationFee != 0
-      ? deficitToCover.mulDiv(config.liquidationFee + ONE_HUNDRED_PERCENT, ONE_HUNDRED_PERCENT)
+      ? deficitToCover.percentMulUp(config.liquidationFee + PercentageMath.PERCENTAGE_FACTOR)
       : deficitToCover;
 
     // amount of asset multiplied by it price
-    uint256 deficitMulPrice = _deficitMulPrice(hub, assetId, deficitToCoverWithFee);
+    uint256 deficitMulPrice = _deficitMulPrice(config.umbrellaStake, deficitToCoverWithFee);
 
     // price of `UmbrellaStakeToken` underlying
     uint256 underlyingPrice = uint256(
@@ -262,10 +263,9 @@ contract UmbrellaSpoke is UmbrellaConfigurationV4, UmbrellaStkManager, IUmbrella
   }
 
   function _deficitMulPrice(
-    address hub,
-    uint256 assetId,
+    address umbrellaStake,
     uint256 deficit
   ) internal view returns (uint256) {
-    return uint256(AggregatorInterface(getAssetOracle(hub, assetId)).latestAnswer()) * deficit;
+    return uint256(AggregatorInterface(_getAssetOracle(umbrellaStake)).latestAnswer()) * deficit;
   }
 }

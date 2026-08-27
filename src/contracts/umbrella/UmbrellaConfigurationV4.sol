@@ -4,15 +4,15 @@ pragma solidity ^0.8.27;
 import {AggregatorInterface} from 'aave-v3-origin/contracts/dependencies/chainlink/AggregatorInterface.sol';
 
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
+import {MathUtils} from 'aave-v4/libraries/math/MathUtils.sol';
+import {PercentageMath} from 'aave-v4/libraries/math/PercentageMath.sol';
 import {WadRayMath} from 'aave-v4/libraries/math/WadRayMath.sol';
-
-import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
 import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
 import {EnumerableSet} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol';
 import {SafeCast} from 'openzeppelin-contracts/contracts/utils/math/SafeCast.sol';
 
-import {IUmbrellaConfiguration} from './interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from './interfaces/IUmbrellaConfigurationBase.sol';
 import {IUmbrellaConfigurationV4} from './interfaces/IUmbrellaConfigurationV4.sol';
 
 import {UmbrellaBase} from './UmbrellaBase.sol';
@@ -21,8 +21,8 @@ import {UmbrellaBase} from './UmbrellaBase.sol';
  * @title UmbrellaConfigurationV4
  * @notice This abstract contract provides base configuration for covering `spoke`s of an Aave V4 `Hub`,
  * including setting `UmbrellaStakeToken`s, `liquidationFee`s, `underlyingOracle`s for pricing, and tracking deficit.
- * @dev Deficit is tracked per `spoke`, while slashing configurations are shared by every `spoke` listed in the
- * coverage of a `hub` and `assetId` pair. A single instance can cover several `Hub`s.
+ * @dev Deficit is tracked per `spoke`, while slashing configurations are shared by every `spoke` covered by a
+ * `hub` and `assetId` pair. A single instance can cover several `Hub`s.
  * @author BGD labs
  */
 abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfigurationV4 {
@@ -30,24 +30,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   using EnumerableSet for EnumerableSet.AddressSet;
   using SafeCast for uint256;
   using WadRayMath for uint256;
+  using {MathUtils.zeroFloorSub} for uint256;
 
-  struct SpokeData {
-    /// @notice Initial deficit (cannot be covered by funds taken from Umbrella users)
-    uint256 deficitOffset;
-    /// @notice Deficit on top of `deficitOffset` (already slashed and waiting to be covered by Umbrella)
-    uint256 pendingDeficit;
-  }
-
-  struct AssetData {
-    /// @notice Map with `UmbrellaStakeToken`s for this `hub` and `assetId` pair and their `liquidationFee`
-    EnumerableMap.AddressToUintMap configurationMap;
-    /// @notice Set of `spoke`s which deficit is tracked and covered for this `hub` and `assetId` pair
-    EnumerableSet.AddressSet coveredSpokes;
-    /// @notice Map of `spoke` addresses and their tracked deficit
-    mapping(address spoke => SpokeData) spokesData;
-    /// @notice Oracle of the asset which deficit is covered
-    address assetOracle;
-  }
+  bytes32 public constant SPOKE_COVERAGE_MANAGER_ROLE = keccak256('SPOKE_COVERAGE_MANAGER_ROLE');
 
   /// @custom:storage-location erc7201:umbrella.storage.UmbrellaConfigurationV4
   struct UmbrellaConfigurationV4Storage {
@@ -73,8 +58,13 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     }
   }
 
-  function __UmbrellaConfigurationV4_init(address slashedFundsRecipient) internal onlyInitializing {
+  function __UmbrellaConfigurationV4_init(
+    address superAdmin,
+    address slashedFundsRecipient
+  ) internal onlyInitializing {
     require(slashedFundsRecipient != address(0), ZeroAddress());
+
+    _grantRole(SPOKE_COVERAGE_MANAGER_ROLE, superAdmin);
 
     _getUmbrellaConfigurationV4Storage().slashedFundsRecipient = slashedFundsRecipient;
   }
@@ -99,19 +89,17 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
       bool configRemoved = assetData.configurationMap.remove(removalPairs[i].umbrellaStake);
       if (configRemoved) {
-        // A `spoke` is only listed while its pair is configured, so that its `deficitOffset` is always
-        // initialized before it can be slashed. The last configuration of a pair therefore stays until
-        // every `spoke` is removed from its coverage.
+        // The `deficitOffset` of a `spoke` is initialized when it is added to the coverage of a configured
+        // pair, so the last configuration of a pair stays until every `spoke` is removed from its coverage
         require(
-          assetData.configurationMap.length() != 0 || assetData.coveredSpokes.length() == 0,
+          assetData.configurationMap.length() != 0 || _getCoveredSpokes(assetData).length == 0,
           SpokesStillCovered()
         );
 
-        // `underlyingOracle` will remain after config removal in order to make function `latestAnswer` inside `UmbrellaStakeToken` workable after config removal
+        // `StakeTokenData` is only flagged as deactivated, so that `underlyingOracle` remains readable
+        // and function `latestAnswer` inside `UmbrellaStakeToken` stays workable after config removal
         // This oracle should not be the only source of price and should not be used after removing the config, however, for the full functionality of `UmbrellaStakeToken`, we will leave it
-        StakeTokenData storage stakeData = $.stakesData[removalPairs[i].umbrellaStake];
-        delete stakeData.hub;
-        delete stakeData.assetId;
+        $.stakesData[removalPairs[i].umbrellaStake].deactivated = true;
 
         emit SlashingConfigurationRemoved(
           removalPairs[i].hub,
@@ -123,7 +111,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   }
 
   /// @inheritdoc IUmbrellaConfigurationV4
-  function addCoveredSpokes(SpokeCoverage[] calldata spokes) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function addCoveredSpokes(
+    SpokeCoverage[] calldata spokes
+  ) external onlyRole(SPOKE_COVERAGE_MANAGER_ROLE) {
     for (uint256 i; i < spokes.length; ++i) {
       _addCoveredSpoke(spokes[i]);
     }
@@ -132,17 +122,18 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   /// @inheritdoc IUmbrellaConfigurationV4
   function removeCoveredSpokes(
     SpokeCoverage[] calldata spokes
-  ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  ) external onlyRole(SPOKE_COVERAGE_MANAGER_ROLE) {
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
 
     for (uint256 i; i < spokes.length; ++i) {
-      // `pendingDeficit` of the `spoke` is kept, so that a re-listing of the same `spoke` takes the
-      // funds already slashed for it into account
-      bool spokeRemoved = $.assetsData[spokes[i].hub][spokes[i].assetId].coveredSpokes.remove(
-        spokes[i].spoke
-      );
+      AssetData storage assetData = $.assetsData[spokes[i].hub][spokes[i].assetId];
+      SpokeData storage spokeData = assetData.spokesData[spokes[i].spoke];
 
-      if (spokeRemoved) {
+      // `deficitOffset` and `pendingDeficit` of the `spoke` are kept, so that a re-addition of the same
+      // `spoke` takes the funds already slashed for it into account
+      if (assetData.listedSpokes.contains(spokes[i].spoke) && !spokeData.deactivated) {
+        spokeData.deactivated = true;
+
         emit SpokeCoverageRemoved(spokes[i].hub, spokes[i].assetId, spokes[i].spoke);
       }
     }
@@ -156,7 +147,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   ) external view returns (SlashingConfig memory) {
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
     (bool exist, uint256 value) = $.assetsData[hub][assetId].configurationMap.tryGet(umbrellaStake);
-    require(exist, ConfigurationNotExist());
+    require(exist, ConfigurationDoesNotExist());
 
     return
       SlashingConfig({
@@ -168,17 +159,17 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
   /// @inheritdoc IUmbrellaConfigurationV4
   function getCoveredSpokes(address hub, uint256 assetId) external view returns (address[] memory) {
-    return _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].coveredSpokes.values();
+    return _getCoveredSpokes(_getUmbrellaConfigurationV4Storage().assetsData[hub][assetId]);
   }
 
   /// @inheritdoc IUmbrellaConfigurationV4
   function getTotalDeficitOffset(address hub, uint256 assetId) external view returns (uint256) {
     AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId];
-    uint256 spokesNumber = assetData.coveredSpokes.length();
+    address[] memory coveredSpokes = _getCoveredSpokes(assetData);
     uint256 totalDeficitOffset;
 
-    for (uint256 i; i < spokesNumber; ++i) {
-      totalDeficitOffset += assetData.spokesData[assetData.coveredSpokes.at(i)].deficitOffset;
+    for (uint256 i; i < coveredSpokes.length; ++i) {
+      totalDeficitOffset += assetData.spokesData[coveredSpokes[i]].deficitOffset;
     }
 
     return totalDeficitOffset;
@@ -187,11 +178,11 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   /// @inheritdoc IUmbrellaConfigurationV4
   function getTotalPendingDeficit(address hub, uint256 assetId) external view returns (uint256) {
     AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId];
-    uint256 spokesNumber = assetData.coveredSpokes.length();
+    address[] memory coveredSpokes = _getCoveredSpokes(assetData);
     uint256 totalPendingDeficit;
 
-    for (uint256 i; i < spokesNumber; ++i) {
-      totalPendingDeficit += assetData.spokesData[assetData.coveredSpokes.at(i)].pendingDeficit;
+    for (uint256 i; i < coveredSpokes.length; ++i) {
+      totalPendingDeficit += assetData.spokesData[coveredSpokes[i]].pendingDeficit;
     }
 
     return totalPendingDeficit;
@@ -204,15 +195,15 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       return 0;
     }
 
-    uint256 spokesNumber = assetData.coveredSpokes.length();
+    address[] memory coveredSpokes = _getCoveredSpokes(assetData);
     uint256 totalSlashableDeficit;
 
-    for (uint256 i; i < spokesNumber; ++i) {
-      totalSlashableDeficit += _getNewSpokeDeficit(
-        assetData,
+    for (uint256 i; i < coveredSpokes.length; ++i) {
+      totalSlashableDeficit += _getSlashableSpokeDeficit(
+        assetData.spokesData[coveredSpokes[i]],
         hub,
         assetId,
-        assetData.coveredSpokes.at(i)
+        coveredSpokes[i]
       );
     }
 
@@ -224,7 +215,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     return _getUmbrellaConfigurationV4Storage().stakesData[umbrellaStake];
   }
 
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationBase
   function latestUnderlyingAnswer(address umbrellaStake) external view returns (int256) {
     address underlyingOracle = _getUmbrellaConfigurationV4Storage()
       .stakesData[umbrellaStake]
@@ -258,8 +249,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
   /// @inheritdoc IUmbrellaConfigurationV4
   function isSpokeCovered(address hub, uint256 assetId, address spoke) public view returns (bool) {
-    return
-      _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].coveredSpokes.contains(spoke);
+    AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId];
+
+    return assetData.listedSpokes.contains(spoke) && !assetData.spokesData[spoke].deactivated;
   }
 
   /// @inheritdoc IUmbrellaConfigurationV4
@@ -268,13 +260,17 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     uint256 assetId,
     address spoke
   ) public view returns (bool, uint256) {
-    AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId];
-
-    if (!assetData.coveredSpokes.contains(spoke)) {
+    if (!isSpokeCovered(hub, assetId, spoke)) {
       return (false, 0);
     }
 
-    uint256 newDeficit = _getNewSpokeDeficit(assetData, hub, assetId, spoke);
+    AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId];
+    uint256 newDeficit = _getSlashableSpokeDeficit(
+      assetData.spokesData[spoke],
+      hub,
+      assetId,
+      spoke
+    );
 
     if (assetData.configurationMap.length() == 1 && newDeficit > 0) {
       return (true, newDeficit);
@@ -304,12 +300,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       .assetsData[hub][assetId].spokesData[spoke].pendingDeficit;
   }
 
-  /// @inheritdoc IUmbrellaConfigurationV4
-  function getAssetOracle(address hub, uint256 assetId) public view returns (address) {
-    return _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].assetOracle;
-  }
-
-  /// @inheritdoc IUmbrellaConfiguration
+  /// @inheritdoc IUmbrellaConfigurationBase
   function SLASHED_FUNDS_RECIPIENT() public view returns (address) {
     return _getUmbrellaConfigurationV4Storage().slashedFundsRecipient;
   }
@@ -321,6 +312,10 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     return _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].configurationMap.length();
   }
 
+  function _getAssetOracle(address umbrellaStake) internal view returns (address) {
+    return _getUmbrellaConfigurationV4Storage().stakesData[umbrellaStake].assetOracle;
+  }
+
   function _updateSlashingConfig(SlashingConfigUpdate calldata slashConfig) internal {
     require(
       slashConfig.hub != address(0) &&
@@ -330,22 +325,18 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       ZeroAddress()
     );
 
-    require(slashConfig.liquidationFee <= ONE_HUNDRED_PERCENT, InvalidLiquidationFee());
+    require(
+      slashConfig.liquidationFee <= PercentageMath.PERCENTAGE_FACTOR,
+      InvalidLiquidationFee()
+    );
     require(_isUmbrellaStkToken(slashConfig.umbrellaStake), InvalidStakeToken());
 
     // one-time safety checks
-    // `Hub`s are not listed anywhere on-chain, so only the presence of code can be checked here
-    require(slashConfig.hub.code.length != 0, InvalidHub());
-
-    (address underlying, uint8 assetDecimals) = IHub(slashConfig.hub).getAssetUnderlyingAndDecimals(
+    (address underlying, ) = IHub(slashConfig.hub).getAssetUnderlyingAndDecimals(
       slashConfig.assetId
     );
     require(underlying != address(0), InvalidAsset());
 
-    require(
-      IERC20Metadata(slashConfig.umbrellaStake).decimals() == assetDecimals,
-      InvalidNumberOfDecimals()
-    );
     require(
       AggregatorInterface(slashConfig.assetOracle).latestAnswer() > 0 &&
         AggregatorInterface(slashConfig.umbrellaStakeUnderlyingOracle).latestAnswer() > 0,
@@ -358,11 +349,10 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     );
 
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
-    AssetData storage assetData = $.assetsData[slashConfig.hub][slashConfig.assetId];
 
     // Using the same `UmbrellaStakeToken` for several different `hub` and `assetId` pairs is prohibited
     // Cause of this we check the `hub` address of the current pair:
-    // If it's empty, then this stake isn't configured for another pair
+    // If it's empty, then this stake has never been configured
     // If `slashConfig.hub` and `slashConfig.assetId` match the current pair, then we are trying to update `slashingConfig`
     // `revert` otherwise
     StakeTokenData storage stakeData = $.stakesData[slashConfig.umbrellaStake];
@@ -374,31 +364,29 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
     // Unlike the V3 version, the `deficitOffset` is not initialized here, cause it is tracked per `spoke`
     // and is already initialized whenever a `spoke` is added to the coverage of this pair
-    assetData.configurationMap.set(slashConfig.umbrellaStake, slashConfig.liquidationFee);
+    $.assetsData[slashConfig.hub][slashConfig.assetId].configurationMap.set(
+      slashConfig.umbrellaStake,
+      slashConfig.liquidationFee
+    );
     $.stakesData[slashConfig.umbrellaStake] = StakeTokenData({
       underlyingOracle: slashConfig.umbrellaStakeUnderlyingOracle,
+      deactivated: false,
+      assetOracle: slashConfig.assetOracle,
       hub: slashConfig.hub,
       assetId: slashConfig.assetId.toUint96()
     });
-
-    if (assetData.assetOracle != slashConfig.assetOracle) {
-      assetData.assetOracle = slashConfig.assetOracle;
-
-      emit AssetOracleChanged(slashConfig.hub, slashConfig.assetId, slashConfig.assetOracle);
-    }
 
     emit SlashingConfigurationChanged(
       slashConfig.hub,
       slashConfig.assetId,
       slashConfig.umbrellaStake,
       slashConfig.liquidationFee,
+      slashConfig.assetOracle,
       slashConfig.umbrellaStakeUnderlyingOracle
     );
   }
 
   function _addCoveredSpoke(SpokeCoverage calldata coverage) internal {
-    // `Hub`s are not listed anywhere on-chain, so only the presence of code can be checked here
-    require(coverage.hub.code.length != 0, InvalidHub());
     require(IHub(coverage.hub).isSpokeListed(coverage.assetId, coverage.spoke), InvalidSpoke());
     // A deficit is eliminated through `Hub.add()` and `Hub.eliminateDeficit()`, so this contract must be
     // a `spoke` of the pair itself, otherwise a slashed deficit could never be eliminated
@@ -411,21 +399,27 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       coverage.assetId
     ];
 
-    // Listing initializes the `deficitOffset` below, so it can only happen on a configured pair. Otherwise
+    // Coverage initializes the `deficitOffset` below, so it can only be added to a configured pair. Otherwise
     // the deficit reported while the pair had no `SlashingConfig` would become slashable as soon as the
     // first one is installed.
     require(assetData.configurationMap.length() != 0, AssetCoverageNotSetup());
 
-    if (assetData.coveredSpokes.add(coverage.spoke)) {
+    SpokeData storage spokeData = assetData.spokesData[coverage.spoke];
+
+    if (assetData.listedSpokes.add(coverage.spoke) || spokeData.deactivated) {
+      delete spokeData.deactivated;
+
       // The deficit already reported by the `spoke` becomes its `deficitOffset`, as otherwise an immediate slashing could be triggered.
-      // If `pendingDeficit` is not zero for some reason, e.g. the `spoke` is re-listed without previous full coverage of its `pendingDeficit`,
+      // If `pendingDeficit` is not zero for some reason, e.g. the `spoke` is covered again without previous full coverage of its `pendingDeficit`,
       // then we need to take this value into account to set the new `deficitOffset` here.
       uint256 spokeDeficit = _getSpokeDeficit(coverage.hub, coverage.assetId, coverage.spoke);
-      uint256 pendingDeficit = assetData.spokesData[coverage.spoke].pendingDeficit;
 
-      uint256 deficitOffset = spokeDeficit > pendingDeficit ? spokeDeficit - pendingDeficit : 0;
-
-      _setDeficitOffset(coverage.hub, coverage.assetId, coverage.spoke, deficitOffset);
+      _setDeficitOffset(
+        coverage.hub,
+        coverage.assetId,
+        coverage.spoke,
+        spokeDeficit.zeroFloorSub(spokeData.pendingDeficit)
+      );
 
       emit SpokeCoverageAdded(coverage.hub, coverage.assetId, coverage.spoke);
     }
@@ -465,17 +459,35 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     return IHub(hub).getSpokeDeficitRay(assetId, spoke).fromRayUp();
   }
 
-  function _getNewSpokeDeficit(
-    AssetData storage assetData,
+  /// @dev Returns the part of the `spoke` deficit that is neither excluded from coverage by its `deficitOffset`
+  /// nor already slashed for through its `pendingDeficit`
+  function _getSlashableSpokeDeficit(
+    SpokeData storage spokeData,
     address hub,
     uint256 assetId,
     address spoke
   ) private view returns (uint256) {
-    SpokeData storage spokeData = assetData.spokesData[spoke];
+    return
+      _getSpokeDeficit(hub, assetId, spoke).zeroFloorSub(
+        spokeData.deficitOffset + spokeData.pendingDeficit
+      );
+  }
 
-    uint256 spokeDeficit = _getSpokeDeficit(hub, assetId, spoke);
-    uint256 notSlashableDeficit = spokeData.deficitOffset + spokeData.pendingDeficit;
+  function _getCoveredSpokes(AssetData storage assetData) private view returns (address[] memory) {
+    address[] memory spokes = assetData.listedSpokes.values();
+    uint256 coveredNumber;
 
-    return spokeDeficit > notSlashableDeficit ? spokeDeficit - notSlashableDeficit : 0;
+    for (uint256 i; i < spokes.length; ++i) {
+      if (!assetData.spokesData[spokes[i]].deactivated) {
+        spokes[coveredNumber++] = spokes[i];
+      }
+    }
+
+    // shrink the array to the `spoke`s that are still covered, the deactivated ones are moved past its end
+    assembly {
+      mstore(spokes, coveredNumber)
+    }
+
+    return spokes;
   }
 }

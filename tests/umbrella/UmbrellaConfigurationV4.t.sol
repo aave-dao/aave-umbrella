@@ -5,7 +5,7 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 
 import {UmbrellaSpokeBaseTest, UmbrellaSpokeHarness} from './utils/UmbrellaSpokeBase.t.sol';
 
-import {IUmbrellaConfiguration} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationBase.sol';
 import {IUmbrellaConfigurationV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV4.sol';
 import {UmbrellaSpoke} from '../../src/contracts/umbrella/UmbrellaSpoke.sol';
 
@@ -23,12 +23,13 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     assertTrue(umbrella.hasRole(COVERAGE_MANAGER_ROLE, defaultAdmin));
     assertTrue(umbrella.hasRole(RESCUE_GUARDIAN_ROLE, defaultAdmin));
     assertTrue(umbrella.hasRole(PAUSE_GUARDIAN_ROLE, defaultAdmin));
+    assertTrue(umbrella.hasRole(SPOKE_COVERAGE_MANAGER_ROLE, defaultAdmin));
   }
 
   function test_invalidInit() public {
     UmbrellaSpokeHarness umbrellaImpl = new UmbrellaSpokeHarness();
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     transparentProxyFactory.create(
       address(umbrellaImpl),
       defaultAdmin,
@@ -41,7 +42,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     transparentProxyFactory.create(
       address(umbrellaImpl),
       defaultAdmin,
@@ -54,7 +55,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     transparentProxyFactory.create(
       address(umbrellaImpl),
       defaultAdmin,
@@ -67,7 +68,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     transparentProxyFactory.create(
       address(umbrellaImpl),
       defaultAdmin,
@@ -107,27 +108,21 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     vm.prank(defaultAdmin);
     umbrella.updateSlashingConfigs(configs);
 
-    IUmbrellaConfiguration.SlashingConfig memory config6Decimals = umbrella.getAssetSlashingConfig(
-      address(hub),
-      ASSET_6_DECIMALS,
-      address(stakeWith6Decimals)
-    );
+    IUmbrellaConfigurationBase.SlashingConfig memory config6Decimals = umbrella
+      .getAssetSlashingConfig(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals));
 
     assertEq(config6Decimals.umbrellaStake, address(stakeWith6Decimals));
     assertEq(config6Decimals.umbrellaStakeUnderlyingOracle, stakeUnderlyingOracle);
     assertEq(config6Decimals.liquidationFee, 0);
 
-    IUmbrellaConfiguration.SlashingConfig memory config18Decimals = umbrella.getAssetSlashingConfig(
-      address(hub),
-      ASSET_18_DECIMALS,
-      address(stakeWith18Decimals)
-    );
+    IUmbrellaConfigurationBase.SlashingConfig memory config18Decimals = umbrella
+      .getAssetSlashingConfig(address(hub), ASSET_18_DECIMALS, address(stakeWith18Decimals));
 
     assertEq(config18Decimals.umbrellaStake, address(stakeWith18Decimals));
     assertEq(config18Decimals.umbrellaStakeUnderlyingOracle, stakeUnderlyingOracle);
     assertEq(config18Decimals.liquidationFee, 100);
 
-    IUmbrellaConfiguration.SlashingConfig[] memory configs6Decimals = umbrella
+    IUmbrellaConfigurationBase.SlashingConfig[] memory configs6Decimals = umbrella
       .getAssetSlashingConfigs(address(hub), ASSET_6_DECIMALS);
 
     assertEq(configs6Decimals.length, 1);
@@ -138,23 +133,22 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     );
     assertEq(configs6Decimals[0].liquidationFee, config6Decimals.liquidationFee);
 
-    assertEq(umbrella.getAssetOracle(address(hub), ASSET_6_DECIMALS), assetOracle);
-    assertEq(umbrella.getAssetOracle(address(hub), ASSET_18_DECIMALS), assetOracle);
-    // an untouched pair keeps no oracle
-    assertEq(umbrella.getAssetOracle(address(anotherHub), ASSET_6_DECIMALS), address(0));
+    assertEq(umbrella.getStakeTokenData(address(stakeWith6Decimals)).assetOracle, assetOracle);
+    assertEq(umbrella.getStakeTokenData(address(stakeWith18Decimals)).assetOracle, assetOracle);
+    // an unconfigured stake keeps no oracle
+    assertEq(umbrella.getStakeTokenData(address(unusedStake)).assetOracle, address(0));
   }
 
   function test_updateSlashingConfigsEmitsEvents() public {
     (address assetOracle, address stakeUnderlyingOracle) = _setUpOracles();
 
     vm.expectEmit(address(umbrella));
-    emit IUmbrellaConfigurationV4.AssetOracleChanged(address(hub), ASSET_6_DECIMALS, assetOracle);
-    vm.expectEmit(address(umbrella));
     emit IUmbrellaConfigurationV4.SlashingConfigurationChanged(
       address(hub),
       ASSET_6_DECIMALS,
       address(stakeWith6Decimals),
       50,
+      assetOracle,
       stakeUnderlyingOracle
     );
 
@@ -198,13 +192,13 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    // the same asset oracle isn't re-emitted, while the configuration change is
     vm.expectEmit(address(umbrella));
     emit IUmbrellaConfigurationV4.SlashingConfigurationChanged(
       address(hub),
       ASSET_6_DECIMALS,
       address(stakeWith6Decimals),
       10,
+      assetOracle,
       stakeUnderlyingOracle
     );
     umbrella.updateSlashingConfigs(
@@ -218,7 +212,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    IUmbrellaConfiguration.SlashingConfig memory config = umbrella.getAssetSlashingConfig(
+    IUmbrellaConfigurationBase.SlashingConfig memory config = umbrella.getAssetSlashingConfig(
       address(hub),
       ASSET_6_DECIMALS,
       address(stakeWith6Decimals)
@@ -231,12 +225,6 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     address newAssetOracle = _newOracle(int256(ORACLE_PRICE) * 2, ORACLE_DECIMALS);
     address newStakeOracle = _newOracle(int256(ORACLE_PRICE) * 3, ORACLE_DECIMALS);
 
-    vm.expectEmit(address(umbrella));
-    emit IUmbrellaConfigurationV4.AssetOracleChanged(
-      address(hub),
-      ASSET_6_DECIMALS,
-      newAssetOracle
-    );
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -248,7 +236,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    assertEq(umbrella.getAssetOracle(address(hub), ASSET_6_DECIMALS), newAssetOracle);
+    assertEq(umbrella.getStakeTokenData(address(stakeWith6Decimals)).assetOracle, newAssetOracle);
     assertEq(
       umbrella
         .getAssetSlashingConfig(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals))
@@ -286,7 +274,8 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     umbrella.updateSlashingConfigs(configs);
 
     assertEq(umbrella.getAssetSlashingConfigs(address(hub), ASSET_6_DECIMALS).length, 2);
-    assertEq(umbrella.getAssetOracle(address(hub), ASSET_6_DECIMALS), assetOracle);
+    assertEq(umbrella.getStakeTokenData(address(stakeWith6Decimals)).assetOracle, assetOracle);
+    assertEq(umbrella.getStakeTokenData(anotherStake).assetOracle, assetOracle);
   }
 
   function test_updateSlashingConfigsZeroAddresses() public {
@@ -294,7 +283,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(0),
@@ -306,7 +295,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -318,7 +307,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -330,7 +319,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ZeroAddress.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.ZeroAddress.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -353,7 +342,9 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       1e4 + 1
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidLiquidationFee.selector));
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidLiquidationFee.selector)
+    );
     vm.prank(defaultAdmin);
     umbrella.updateSlashingConfigs(configs);
   }
@@ -366,12 +357,13 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       0
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidStakeToken.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidStakeToken.selector));
     vm.prank(defaultAdmin);
     umbrella.updateSlashingConfigs(configs);
   }
 
-  function test_updateSlashingConfigsInvalidHub() public {
+  /// @dev The `hub` isn't checked for code, the asset lookup performed on it reverts on its own
+  function test_updateSlashingConfigsCodelessHub() public {
     IUmbrellaConfigurationV4.SlashingConfigUpdate[] memory configs = _slashingConfigs(
       someone,
       ASSET_6_DECIMALS,
@@ -379,7 +371,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       0
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.InvalidHub.selector));
+    vm.expectRevert();
     vm.prank(defaultAdmin);
     umbrella.updateSlashingConfigs(configs);
   }
@@ -397,19 +389,19 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     umbrella.updateSlashingConfigs(configs);
   }
 
+  /// @dev The decimals of the `umbrellaStake` aren't matched against the ones of the covered asset,
+  /// the conversion between both is done through their oracles
   function test_updateSlashingConfigsDifferentDecimals() public {
-    IUmbrellaConfigurationV4.SlashingConfigUpdate[] memory configs = _slashingConfigs(
-      address(hub),
-      ASSET_6_DECIMALS,
-      address(stakeWith18Decimals),
-      0
+    _updateSlashingConfigs(
+      _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith18Decimals), 0)
     );
 
-    vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfiguration.InvalidNumberOfDecimals.selector)
+    assertEq(
+      umbrella
+        .getAssetSlashingConfig(address(hub), ASSET_6_DECIMALS, address(stakeWith18Decimals))
+        .umbrellaStake,
+      address(stakeWith18Decimals)
     );
-    vm.prank(defaultAdmin);
-    umbrella.updateSlashingConfigs(configs);
   }
 
   function test_updateSlashingConfigsInvalidOraclePrice(uint128 amount) public {
@@ -418,7 +410,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
 
     vm.startPrank(defaultAdmin);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidOraclePrice.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidOraclePrice.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -430,7 +422,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.InvalidOraclePrice.selector));
+    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationBase.InvalidOraclePrice.selector));
     umbrella.updateSlashingConfigs(
       _slashingConfigs(
         address(hub),
@@ -476,7 +468,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       )
     );
 
-    assertEq(umbrella.getAssetOracle(address(hub), ASSET_6_DECIMALS), assetOracle);
+    assertEq(umbrella.getStakeTokenData(address(stakeWith6Decimals)).assetOracle, assetOracle);
   }
 
   function test_updateSlashingConfigsStakeAlreadySetForAnotherAsset() public {
@@ -533,6 +525,42 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     vm.stopPrank();
   }
 
+  /// @dev The removal of a `SlashingConfig` only deactivates it, so the stake stays bound to its pair
+  function test_updateSlashingConfigsAfterRemovalKeepsStakeBoundToItsPair() public {
+    _updateSlashingConfigs(
+      _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals), 0)
+    );
+
+    vm.prank(defaultAdmin);
+    umbrella.removeSlashingConfigs(
+      _removalPairs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals))
+    );
+
+    assertTrue(umbrella.getStakeTokenData(address(stakeWith6Decimals)).deactivated);
+
+    IUmbrellaConfigurationV4.SlashingConfigUpdate[] memory configs = _slashingConfigs(
+      address(hub),
+      ASSET_18_DECIMALS,
+      address(stakeWith6Decimals),
+      0
+    );
+
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IUmbrellaConfigurationV4.UmbrellaStakeAlreadySetForAnotherAsset.selector
+      )
+    );
+    vm.prank(defaultAdmin);
+    umbrella.updateSlashingConfigs(configs);
+
+    // re-installing the configuration of the same pair activates the stake back
+    _updateSlashingConfigs(
+      _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals), 0)
+    );
+
+    assertFalse(umbrella.getStakeTokenData(address(stakeWith6Decimals)).deactivated);
+  }
+
   function test_removeSlashingConfigs() public {
     _setUpDefaultCoverage();
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
@@ -564,10 +592,11 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       address(stakeWith6Decimals)
     );
 
-    // the `underlyingOracle` remains, so that `latestAnswer` inside the stake token keeps working
+    // the data of the stake token remains, so that `latestAnswer` inside it keeps working
+    assertTrue(stakeData.deactivated);
     assertNotEq(stakeData.underlyingOracle, address(0));
-    assertEq(stakeData.hub, address(0));
-    assertEq(stakeData.assetId, 0);
+    assertEq(stakeData.hub, address(hub));
+    assertEq(stakeData.assetId, ASSET_6_DECIMALS);
 
     stakeWith6Decimals.latestAnswer();
   }
@@ -621,8 +650,10 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     );
 
     assertEq(stakeData.underlyingOracle, address(0));
+    assertEq(stakeData.assetOracle, address(0));
     assertEq(stakeData.hub, address(0));
     assertEq(stakeData.assetId, 0);
+    assertFalse(stakeData.deactivated);
 
     (address assetOracle, address stakeUnderlyingOracle) = _setUpOracles();
 
@@ -640,18 +671,22 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     stakeData = umbrella.getStakeTokenData(address(stakeWith18Decimals));
 
     assertEq(stakeData.underlyingOracle, stakeUnderlyingOracle);
+    assertEq(stakeData.assetOracle, assetOracle);
     assertEq(stakeData.hub, address(hub));
     assertEq(stakeData.assetId, ASSET_18_DECIMALS);
+    assertFalse(stakeData.deactivated);
   }
 
   function test_getAssetSlashingConfigNotExist() public {
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfiguration.ConfigurationNotExist.selector));
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.ConfigurationDoesNotExist.selector)
+    );
     umbrella.getAssetSlashingConfig(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals));
   }
 
   function test_latestUnderlyingAnswer() public {
     vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfiguration.ConfigurationHasNotBeenSet.selector)
+      abi.encodeWithSelector(IUmbrellaConfigurationBase.ConfigurationHasNotBeenSet.selector)
     );
     umbrella.latestUnderlyingAnswer(address(stakeWith6Decimals));
 
@@ -733,10 +768,27 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 0);
   }
 
-  function test_addCoveredSpokesInvalidHub() public {
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.InvalidHub.selector));
+  /// @dev The `hub` isn't checked for code, the `spoke` lookup performed on it reverts on its own
+  function test_addCoveredSpokesCodelessHub() public {
+    IUmbrellaConfigurationV4.SpokeCoverage[] memory coverages = _coverages(
+      someone,
+      ASSET_6_DECIMALS,
+      spokeA
+    );
+
+    vm.expectRevert();
     vm.prank(defaultAdmin);
-    umbrella.addCoveredSpokes(_coverages(someone, ASSET_6_DECIMALS, spokeA));
+    umbrella.addCoveredSpokes(coverages);
+  }
+
+  function test_addCoveredSpokesAssetCoverageNotSetup() public {
+    hub.setSpokeListed(ASSET_6_DECIMALS, spokeA, true);
+
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationV4.AssetCoverageNotSetup.selector)
+    );
+    vm.prank(defaultAdmin);
+    umbrella.addCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
   }
 
   function test_addCoveredSpokesInvalidSpoke() public {
@@ -822,6 +874,24 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     assertFalse(umbrella.isSpokeCovered(address(hub), ASSET_6_DECIMALS, spokeA));
   }
 
+  function test_removeCoveredSpokesByGrantedRole() public {
+    _updateSlashingConfigs(
+      _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals), 0)
+    );
+    hub.setSpokeListed(ASSET_6_DECIMALS, spokeA, true);
+
+    vm.prank(defaultAdmin);
+    umbrella.grantRole(SPOKE_COVERAGE_MANAGER_ROLE, someone);
+
+    vm.startPrank(someone);
+    umbrella.addCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
+    assertTrue(umbrella.isSpokeCovered(address(hub), ASSET_6_DECIMALS, spokeA));
+
+    umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
+    assertFalse(umbrella.isSpokeCovered(address(hub), ASSET_6_DECIMALS, spokeA));
+    vm.stopPrank();
+  }
+
   function test_isSpokeSlashable() public {
     // not listed in the coverage
     (bool isSlashable, uint256 newDeficit) = umbrella.isSpokeSlashable(
@@ -886,6 +956,31 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getTotalPendingDeficit(address(hub), ASSET_6_DECIMALS), 250 * 1e6);
     // (1000 - 600 - 200) + (400 - 100 - 50)
     assertEq(umbrella.getTotalSlashableDeficit(address(hub), ASSET_6_DECIMALS), 450 * 1e6);
+  }
+
+  /// @dev A deactivated `spoke` remains known to its pair, but stops contributing to any of its totals
+  function test_getTotalsSkipDeactivatedSpokes() public {
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 100 * 1e6);
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeB, 200 * 1e6);
+
+    _setUpDefaultCoverage();
+    _listAndCoverSpoke(address(hub), ASSET_6_DECIMALS, spokeB);
+
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 400 * 1e6);
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeB, 300 * 1e6);
+    umbrella.setPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeB, 50 * 1e6);
+
+    vm.prank(defaultAdmin);
+    umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
+
+    address[] memory coveredSpokes = umbrella.getCoveredSpokes(address(hub), ASSET_6_DECIMALS);
+    assertEq(coveredSpokes.length, 1);
+    assertEq(coveredSpokes[0], spokeB);
+
+    assertEq(umbrella.getTotalDeficitOffset(address(hub), ASSET_6_DECIMALS), 200 * 1e6);
+    assertEq(umbrella.getTotalPendingDeficit(address(hub), ASSET_6_DECIMALS), 50 * 1e6);
+    // 500 - 200 - 50
+    assertEq(umbrella.getTotalSlashableDeficit(address(hub), ASSET_6_DECIMALS), 250 * 1e6);
   }
 
   function test_getTotalSlashableDeficitRequiresOneSlashingConfig() public {
@@ -970,7 +1065,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         address(this),
-        DEFAULT_ADMIN_ROLE
+        SPOKE_COVERAGE_MANAGER_ROLE
       )
     );
     umbrella.addCoveredSpokes(coverages);
@@ -979,7 +1074,7 @@ contract UmbrellaSpoke_Configuration_Test is UmbrellaSpokeBaseTest {
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         address(this),
-        DEFAULT_ADMIN_ROLE
+        SPOKE_COVERAGE_MANAGER_ROLE
       )
     );
     umbrella.removeCoveredSpokes(coverages);

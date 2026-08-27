@@ -9,7 +9,7 @@ import {UmbrellaExtendedPayload} from '../../src/contracts/payloads/UmbrellaExte
 import {UmbrellaPayloadSetup} from './utils/UmbrellaPayloadSetup.t.sol';
 
 import {IUmbrellaEngineStructs as IStructs, IRewardsStructs as IRStructs} from '../../src/contracts/payloads/IUmbrellaEngineStructs.sol';
-import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfigurationV3 as ICStructs} from '../../src/contracts/payloads/IUmbrellaEngineStructs.sol';
+import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfiguration as ICStructs} from '../../src/contracts/payloads/IUmbrellaEngineStructs.sol';
 
 import {StakeToken} from '../../src/contracts/stakeToken/StakeToken.sol';
 

@@ -7,14 +7,14 @@ import {SafeERC20} from 'openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 import {IRescuableBase, RescuableBase} from 'solidity-utils/contracts/utils/RescuableBase.sol';
 import {Rescuable} from 'solidity-utils/contracts/utils/Rescuable.sol';
 
-import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfigurationV3 as ICStructs} from '../IUmbrellaEngineStructs.sol';
+import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfiguration as ICStructs} from '../IUmbrellaEngineStructs.sol';
 import {IUmbrellaEngineStructs as IStructs, IRewardsStructs as IRStructs} from '../IUmbrellaEngineStructs.sol';
 
 import {IUmbrellaConfigEngine} from './IUmbrellaConfigEngine.sol';
 
 import {EngineUtils} from '../utils/EngineUtils.sol';
 
-import {IUmbrellaV3} from '../../umbrella/interfaces/IUmbrellaV3.sol';
+import {IUmbrella} from '../../umbrella/interfaces/IUmbrella.sol';
 
 import {IRewardsController} from '../../rewards/interfaces/IRewardsController.sol';
 
@@ -57,7 +57,7 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
   function executeCreateTokens(
     ISMStructs.StakeTokenSetup[] memory configs
   ) public returns (address[] memory) {
-    return IUmbrellaV3(UMBRELLA).createStakeTokens(configs);
+    return IUmbrella(UMBRELLA).createStakeTokens(configs);
   }
 
   function executeUpdateUnstakeConfigs(IStructs.UnstakeConfig[] memory configs) public {
@@ -71,24 +71,24 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
   }
 
   function executeChangeCooldowns(ISMStructs.CooldownConfig[] memory configs) public {
-    IUmbrellaV3(UMBRELLA).setCooldownStk(configs);
+    IUmbrella(UMBRELLA).setCooldownStk(configs);
   }
 
   function executeChangeUnstakeWindows(ISMStructs.UnstakeWindowConfig[] memory configs) public {
-    IUmbrellaV3(UMBRELLA).setUnstakeWindowStk(configs);
+    IUmbrella(UMBRELLA).setUnstakeWindowStk(configs);
   }
 
   function executeRemoveSlashingConfigs(ICStructs.SlashingConfigRemoval[] memory configs) public {
-    IUmbrellaV3(UMBRELLA).removeSlashingConfigs(configs);
+    IUmbrella(UMBRELLA).removeSlashingConfigs(configs);
   }
 
   function executeUpdateSlashingConfigs(ICStructs.SlashingConfigUpdate[] memory configs) public {
-    IUmbrellaV3(UMBRELLA).updateSlashingConfigs(configs);
+    IUmbrella(UMBRELLA).updateSlashingConfigs(configs);
   }
 
   function executeSetDeficitOffsets(IStructs.SetDeficitOffset[] memory configs) public {
     for (uint256 i; i < configs.length; ++i) {
-      IUmbrellaV3(UMBRELLA).setDeficitOffset(configs[i].reserve, configs[i].newDeficitOffset);
+      IUmbrella(UMBRELLA).setDeficitOffset(configs[i].reserve, configs[i].newDeficitOffset);
     }
   }
 
@@ -98,7 +98,7 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
         _approveBeforeCoverage(configs[i].reserve, configs[i].amount);
       }
 
-      IUmbrellaV3(UMBRELLA).coverPendingDeficit(configs[i].reserve, configs[i].amount);
+      IUmbrella(UMBRELLA).coverPendingDeficit(configs[i].reserve, configs[i].amount);
     }
   }
 
@@ -108,7 +108,7 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
         _approveBeforeCoverage(configs[i].reserve, configs[i].amount);
       }
 
-      IUmbrellaV3(UMBRELLA).coverDeficitOffset(configs[i].reserve, configs[i].amount);
+      IUmbrella(UMBRELLA).coverDeficitOffset(configs[i].reserve, configs[i].amount);
     }
   }
 
@@ -118,7 +118,7 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
         _approveBeforeCoverage(configs[i].reserve, configs[i].amount);
       }
 
-      IUmbrellaV3(UMBRELLA).coverReserveDeficit(configs[i].reserve, configs[i].amount);
+      IUmbrella(UMBRELLA).coverReserveDeficit(configs[i].reserve, configs[i].amount);
     }
   }
 
@@ -214,7 +214,7 @@ contract UmbrellaConfigEngine is Rescuable, IUmbrellaConfigEngine {
   /////////////////////////////////////////////////////////////////////////////////////////
 
   function _approveBeforeCoverage(address reserve, uint256 amount) internal {
-    address tokenForCoverage = IUmbrellaV3(UMBRELLA).tokenForDeficitCoverage(reserve);
+    address tokenForCoverage = IUmbrella(UMBRELLA).tokenForDeficitCoverage(reserve);
 
     IERC20(tokenForCoverage).forceApprove(UMBRELLA, amount);
   }
