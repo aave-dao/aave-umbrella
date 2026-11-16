@@ -6,7 +6,7 @@ import {IPoolAddressesProvider} from 'aave-v3-origin/contracts/interfaces/IPoolA
 
 import {IUmbrellaConfigurationBase} from './IUmbrellaConfigurationBase.sol';
 
-interface IUmbrellaConfiguration is IUmbrellaConfigurationBase {
+interface IUmbrellaConfigurationV3 is IUmbrellaConfigurationBase {
   struct SlashingConfigUpdate {
     /// @notice Reserve which configuration should be updated
     address reserve;

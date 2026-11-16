@@ -5,6 +5,7 @@ import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessCon
 
 import {UmbrellaSpokeBaseTest} from './utils/UmbrellaSpokeBase.t.sol';
 import {MockHub} from './utils/mocks/MockHub.sol';
+import {MockSpoke} from './utils/mocks/MockSpoke.sol';
 
 import {IUmbrellaBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaBase.sol';
 import {IUmbrellaConfigurationV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV4.sol';
@@ -56,9 +57,13 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
   }
 
-  /// @dev A `spoke` can only be listed while its pair is configured, so an unconfigured pair covers no `spoke`
+  /// @dev The `deficitOffset` is initialized again once the first `SlashingConfig` is installed, so it can't be set before
   function test_setDeficitOffsetNotSetup(uint256 amount) public {
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.SpokeNotCovered.selector));
+    _listAndCoverSpoke(address(hub), ASSET_6_DECIMALS, spokeA);
+
+    vm.expectRevert(
+      abi.encodeWithSelector(IUmbrellaConfigurationV4.AssetCoverageNotSetup.selector)
+    );
     vm.prank(defaultAdmin);
     umbrella.setDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, amount);
   }
@@ -220,12 +225,26 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 0);
   }
 
-  function test_coverDeficitOffsetSpokeNotCovered() public {
+  /// @dev As in V3, the `deficitOffset` left after the removal of the coverage can still be covered
+  function test_coverDeficitOffsetOfRemovedSpoke() public {
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
     _setUpDefaultCoverage();
+    _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.SpokeNotCovered.selector));
     vm.prank(defaultAdmin);
-    umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeB, 1e6);
+    umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
+
+    vm.prank(defaultAdmin);
+    uint256 covered = umbrella.coverDeficitOffset(
+      address(hub),
+      ASSET_6_DECIMALS,
+      spokeA,
+      1_000 * 1e6
+    );
+
+    assertEq(covered, 1_000 * 1e6);
+    assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 0);
+    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeA), 0);
   }
 
   function test_coverPendingDeficit() public {
@@ -278,12 +297,28 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 0);
   }
 
-  function test_coverPendingDeficitSpokeNotCovered() public {
-    _setUpDefaultCoverage();
+  /// @dev As in V3, the `pendingDeficit` left after the removal of the coverage and configuration can still be covered
+  function test_coverPendingDeficitOfRemovedSpoke() public {
+    _setUpSlashedSpoke(1_000 * 1e6);
+    _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.SpokeNotCovered.selector));
-    vm.prank(defaultAdmin);
-    umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeB, 1e6);
+    vm.startPrank(defaultAdmin);
+    umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
+    umbrella.removeSlashingConfigs(
+      _removalPairs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals))
+    );
+
+    uint256 covered = umbrella.coverPendingDeficit(
+      address(hub),
+      ASSET_6_DECIMALS,
+      spokeA,
+      1_000 * 1e6
+    );
+    vm.stopPrank();
+
+    assertEq(covered, 1_000 * 1e6);
+    assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 0);
+    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeA), 0);
   }
 
   function test_coverSpokeDeficit() public {
@@ -339,7 +374,7 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     vm.prank(defaultAdmin);
     umbrella.coverSpokeDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_100 * 1e6);
 
-    // covering the offset isn't enough while the `SlashingConfig` is in place
+    // covering the offset isn't enough while the `spoke` is covered
     vm.prank(defaultAdmin);
     umbrella.coverDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
 
@@ -351,14 +386,10 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     vm.prank(defaultAdmin);
     umbrella.coverSpokeDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 500 * 1e6);
 
-    // with the coverage of the `spoke` and the configuration removed the remaining deficit can be
-    // covered directly, the `spoke` first, as a covered one cannot outlive the configuration of its pair
-    vm.startPrank(defaultAdmin);
+    // with the coverage of the `spoke` removed the remaining deficit can be covered directly,
+    // even though the hub asset keeps its configuration
+    vm.prank(defaultAdmin);
     umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
-    umbrella.removeSlashingConfigs(
-      _removalPairs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals))
-    );
-    vm.stopPrank();
 
     _fundCoverageManager(address(underlying6Decimals), 500 * 1e6);
 
@@ -372,18 +403,43 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     _setUpSlashedSpoke(1_000 * 1e6);
     _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
 
-    vm.startPrank(defaultAdmin);
+    vm.prank(defaultAdmin);
     umbrella.removeCoveredSpokes(_coverages(address(hub), ASSET_6_DECIMALS, spokeA));
-    umbrella.removeSlashingConfigs(
-      _removalPairs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals))
-    );
-    vm.stopPrank();
 
     // the `pendingDeficit` is kept for a re-listing of the `spoke`, so it has to be covered through
-    // `coverPendingDeficit` and blocks a direct coverage even once the pair is unconfigured
+    // `coverPendingDeficit` and blocks a direct coverage even once the `spoke` is not covered
     vm.expectRevert(abi.encodeWithSelector(IUmbrellaV4.SpokeIsConfigured.selector));
     vm.prank(defaultAdmin);
     umbrella.coverSpokeDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
+
+    vm.prank(defaultAdmin);
+    umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
+
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 500 * 1e6);
+    _fundCoverageManager(address(underlying6Decimals), 500 * 1e6);
+
+    vm.prank(defaultAdmin);
+    uint256 covered = umbrella.coverSpokeDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 500 * 1e6);
+
+    assertEq(covered, 500 * 1e6);
+  }
+
+  /// @dev A `spoke` that is not covered can be covered directly, even if its hub asset is configured for other `spoke`s
+  function test_coverSpokeDeficitOfUncoveredSpokeOnConfiguredHubAsset() public {
+    _setUpDefaultCoverage();
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeB, 1_000 * 1e6);
+    _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6);
+
+    vm.prank(defaultAdmin);
+    uint256 covered = umbrella.coverSpokeDeficit(
+      address(hub),
+      ASSET_6_DECIMALS,
+      spokeB,
+      1_000 * 1e6
+    );
+
+    assertEq(covered, 1_000 * 1e6);
+    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeB), 0);
   }
 
   function test_slash() public {
@@ -446,29 +502,31 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getPendingDeficit(address(hub), ASSET_18_DECIMALS, spokeA), 1_000 * 1e18);
   }
 
-  /// @dev The asset and the stake underlying are priced independently, so the slashed amount follows their ratio
+  /// @dev The asset is priced by the oracle of the slashed `spoke`, so the slashed amount follows its ratio
+  /// to the stake underlying price, which can differ from one `spoke` to another
   function test_slashWithDifferentPrices() public {
-    _updateSlashingConfigs(
-      _slashingConfigs(
-        address(hub),
-        ASSET_6_DECIMALS,
-        address(stakeWith6Decimals),
-        0,
-        _newOracle(2e8, ORACLE_DECIMALS),
-        _newOracle(1e8, ORACLE_DECIMALS)
-      )
-    );
-    _listAndCoverSpoke(address(hub), ASSET_6_DECIMALS, spokeA);
+    _setUpDefaultCoverage();
+    _listAndCoverSpoke(address(hub), ASSET_6_DECIMALS, spokeB);
     _fillStake(address(stakeWith6Decimals), 10_000 * 1e6);
 
+    MockSpoke(spokeA).setPrice(2e8);
+    MockSpoke(spokeB).setPrice(3e8);
+
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
+    hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeB, 1_000 * 1e6);
 
     uint256 coveredDeficit = umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
 
     assertEq(coveredDeficit, 1_000 * 1e6);
-    // the asset is worth twice the stake underlying, so twice as much of it is slashed
+    // `spokeA` prices the asset at twice the stake underlying, so twice as much of it is slashed
     assertEq(underlying6Decimals.balanceOf(collector), 2_000 * 1e6);
     assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
+
+    coveredDeficit = umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeB);
+
+    assertEq(coveredDeficit, 1_000 * 1e6);
+    // while `spokeB` prices it at three times
+    assertEq(underlying6Decimals.balanceOf(collector), 5_000 * 1e6);
   }
 
   function test_slashWithNonZeroLiquidationFee(uint256 liquidationFee) public {
@@ -501,8 +559,8 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 1_000 * 1e6);
   }
 
-  /// @dev The `liquidationFee` is applied rounding up, so that the fee is never short by a wei
-  function test_slashRoundsLiquidationFeeUp() public {
+  /// @dev As in V3, the `liquidationFee` is applied rounding down
+  function test_slashRoundsLiquidationFeeDown() public {
     _updateSlashingConfigs(
       _slashingConfigs(address(hub), ASSET_6_DECIMALS, address(stakeWith6Decimals), 1)
     );
@@ -519,12 +577,12 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
       spokeA,
       address(stakeWith6Decimals),
       1_000_001,
-      101
+      100
     );
 
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeA);
 
-    assertEq(underlying6Decimals.balanceOf(collector), 1_000_001 + 101);
+    assertEq(underlying6Decimals.balanceOf(collector), 1_000_001 + 100);
   }
 
   function test_slashWithNonZeroLiquidationFeeExceedingStake(uint256 liquidationFee) public {
@@ -565,8 +623,8 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     umbrella.slash(address(hub), ASSET_6_DECIMALS, spokeB);
   }
 
-  /// @dev Decommissioning the coverage of a pair unlists its `spoke`s first, so that no `spoke` is ever
-  /// covered while the pair has no `SlashingConfig`
+  /// @dev Decommissioning the coverage of a hub asset unlists its `spoke`s first, so that no `spoke` is ever
+  /// covered while the hub asset has no `SlashingConfig`
   function test_slashNoConfig() public {
     _setUpDefaultCoverage();
     _fillStake(address(stakeWith6Decimals), 10_000 * 1e6);
@@ -658,12 +716,12 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
     umbrella.withdrawStrandedFunds(address(hub), ASSET_6_DECIMALS, liquidity + 1);
   }
 
-  /// @dev The `Hub` mints added shares rounding down and burns them rounding up, so covering the full
-  /// amount transferred would need one share more than the coverage just added
+  /// @dev The `Hub` mints added shares rounding down and burns them rounding up, so the caller pays up to a few wei
+  /// more than the amount eliminated, which is exactly the requested one
   function test_coverDeficitOffsetWithAppreciatedShares() public {
     hub.addSpokeDeficit(ASSET_6_DECIMALS, spokeA, 1_000 * 1e6);
     _setUpDefaultCoverage();
-    _fundCoverageManager(address(underlying6Decimals), 500 * 1e6);
+    _fundCoverageManager(address(underlying6Decimals), 500 * 1e6 + 2);
 
     // the added shares appreciated by 10% through the interest paid by the borrowers
     hub.accrueInterest(ASSET_6_DECIMALS, hub.getAssetLiquidity(ASSET_6_DECIMALS) / 10);
@@ -676,16 +734,29 @@ contract UmbrellaSpoke_Test is UmbrellaSpokeBaseTest {
       500 * 1e6
     );
 
-    // the shares received cannot buy back the whole amount, the dust stays in the `Hub`
-    assertLe(covered, 500 * 1e6);
-    assertGe(covered, 500 * 1e6 - 2);
-
-    assertEq(
-      umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA),
-      1_000 * 1e6 - covered
-    );
-    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeA), 1_000 * 1e6 - covered);
+    assertEq(covered, 500 * 1e6);
+    assertEq(umbrella.getDeficitOffset(address(hub), ASSET_6_DECIMALS, spokeA), 500 * 1e6);
+    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeA), 500 * 1e6);
     assertEq(underlying6Decimals.balanceOf(address(umbrella)), 0);
+  }
+
+  /// @dev With appreciated shares, `add()` of a single wei mints no share, so the last wei must still be coverable
+  function test_coverLastWeiOfPendingDeficitWithAppreciatedShares() public {
+    _setUpSlashedSpoke(1_000 * 1e6);
+    _fundCoverageManager(address(underlying6Decimals), 1_000 * 1e6 + 4);
+
+    hub.accrueInterest(ASSET_6_DECIMALS, hub.getAssetLiquidity(ASSET_6_DECIMALS) / 10);
+
+    vm.startPrank(defaultAdmin);
+    umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1_000 * 1e6 - 1);
+    assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 1);
+
+    uint256 covered = umbrella.coverPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA, 1);
+    vm.stopPrank();
+
+    assertEq(covered, 1);
+    assertEq(umbrella.getPendingDeficit(address(hub), ASSET_6_DECIMALS, spokeA), 0);
+    assertEq(hub.getSpokeDeficit(ASSET_6_DECIMALS, spokeA), 0);
   }
 
   function test_coverRevertsWhenUmbrellaIsNotAnActiveSpoke() public {

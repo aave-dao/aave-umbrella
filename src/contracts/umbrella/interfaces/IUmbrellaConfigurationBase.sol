@@ -34,7 +34,7 @@ interface IUmbrellaConfigurationBase {
   /**
    * @dev Attempted to get `SlashingConfig` for this `reserve` and `StakeToken`, however config doesn't exist for this pair.
    */
-  error ConfigurationDoesNotExist();
+  error ConfigurationNotExist();
 
   /**
    * @dev Attempted to get price of `StakeToken` underlying, however the oracle has never been set.

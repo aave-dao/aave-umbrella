@@ -82,7 +82,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   );
 
   /**
-   * @dev Attempted to call `coverSpokeDeficit()` of a `spoke`, which has some configuration.
+   * @dev Attempted to call `coverSpokeDeficit()` of a `spoke`, which is covered or has some `pendingDeficit/deficitOffset` left.
    * In this case functions `coverPendingDeficit` or `coverDeficitOffset` should be used instead.
    */
   error SpokeIsConfigured();
@@ -94,7 +94,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
    * @notice Sets a new `deficitOffset` value for this `spoke`.
    * @dev `deficitOffset` can be increased arbitrarily by a value exceeding `spokeDeficit - pendingDeficit`.
    * It can also be decreased, but not less than the same value `spokeDeficit - pendingDeficit`.
-   * `deficitOffset` can only be changed for a `spoke` covered by a `hub` and `assetId` pair.
+   * `deficitOffset` can only be changed for a `spoke` covered by a hub asset that has a `SlashingConfig`.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -126,7 +126,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   /**
    * @notice Pulls funds to resolve the `pendingDeficit` of a `spoke` **up to** specified amount.
    * @dev If the amount exceeds the existing `pendingDeficit`, only the `pendingDeficit` will be eliminated.
-   * Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
+   * The caller can be charged up to a few wei more than the eliminated amount, due to the `Hub` shares rounding.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -143,7 +143,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   /**
    * @notice Pulls funds to resolve the `deficitOffset` of a `spoke` **up to** specified amount.
    * @dev If the amount exceeds the existing `deficitOffset`, only the `deficitOffset` will be eliminated.
-   * Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
+   * The caller can be charged up to a few wei more than the eliminated amount, due to the `Hub` shares rounding.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -160,10 +160,11 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   /**
    * @notice Pulls funds to resolve the deficit of a `spoke` **up to** specified amount.
    * @dev If the amount exceeds the existing `spoke` deficit, only the `spoke` deficit will be eliminated.
+   * The caller can be charged up to a few wei more than the eliminated amount, due to the `Hub` shares rounding.
    * Can only be called if this `spoke` is not configured within `Umbrella`.
-   * (If the `spoke` has uncovered `deficitOffset`, `pendingDeficit` or at least one `SlashingConfig` is set
-   * for its `hub` and `assetId` pair, then the function will revert. In this case, to call this function you must
-   * first cover `pendingDeficit` and `deficitOffset`, along with removing all `SlashingConfig`s
+   * (If the `spoke` has uncovered `deficitOffset`, `pendingDeficit` or is covered by its hub asset,
+   * then the function will revert. In this case, to call this function you must first cover `pendingDeficit`
+   * and `deficitOffset`, along with removing the `spoke` from the coverage
    * or use `coverPendingDeficit/coverDeficitOffset` instead.)
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
@@ -183,7 +184,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   /**
    * @notice Performs a slashing to cover **up to** the new deficit reported by a `spoke`,
    * i.e. `spokeDeficit - (pendingDeficit + deficitOffset)`.
-   * @dev Reverts if the `spoke` is not covered by this `hub` and `assetId` pair.
+   * @dev Reverts if the `spoke` is not covered by this hub asset.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @param spoke Address of the `spoke`
@@ -192,7 +193,7 @@ interface IUmbrellaV4 is IUmbrellaConfigurationV4, IUmbrellaBase {
   function slash(address hub, uint256 assetId, address spoke) external returns (uint256);
 
   /**
-   * @notice Returns an address of token, which should be used to cover a deficit of this `hub` and `assetId` pair.
+   * @notice Returns an address of token, which should be used to cover a deficit of this hub asset.
    * @param hub Address of the `Hub`
    * @param assetId Id of the asset
    * @return Address of token to use for deficit coverage

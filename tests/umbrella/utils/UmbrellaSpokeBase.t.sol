@@ -19,6 +19,7 @@ import {UmbrellaSpoke} from '../../../src/contracts/umbrella/UmbrellaSpoke.sol';
 
 import {MockHub} from './mocks/MockHub.sol';
 import {MockOracleWithDecimals} from './mocks/MockOracleWithDecimals.sol';
+import {MockSpoke} from './mocks/MockSpoke.sol';
 
 import {MockERC20_6_Decimals} from '../../rewards/utils/mock/MockERC20_6_Decimals.sol';
 import {MockERC20_18_Decimals} from '../../rewards/utils/mock/MockERC20_18_Decimals.sol';
@@ -50,8 +51,8 @@ abstract contract UmbrellaSpokeBaseTest is Test {
 
   address public collector = vm.addr(0x6000);
 
-  address public spokeA = vm.addr(0x7000);
-  address public spokeB = vm.addr(0x7001);
+  address public spokeA;
+  address public spokeB;
   address public unlistedSpoke = vm.addr(0x7002);
   address public tokenizationSpoke = vm.addr(0x7003);
 
@@ -86,7 +87,6 @@ abstract contract UmbrellaSpokeBaseTest is Test {
   bytes32 public constant COVERAGE_MANAGER_ROLE = keccak256('COVERAGE_MANAGER_ROLE');
   bytes32 public constant RESCUE_GUARDIAN_ROLE = keccak256('RESCUE_GUARDIAN_ROLE');
   bytes32 public constant PAUSE_GUARDIAN_ROLE = keccak256('PAUSE_GUARDIAN_ROLE');
-  bytes32 public constant SPOKE_COVERAGE_MANAGER_ROLE = keccak256('SPOKE_COVERAGE_MANAGER_ROLE');
   bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
 
   function setUp() public virtual {
@@ -140,6 +140,7 @@ abstract contract UmbrellaSpokeBaseTest is Test {
 
     _createStakeTokens();
     _createHubs();
+    _createSpokes();
   }
 
   function _createStakeTokens() internal {
@@ -193,7 +194,7 @@ abstract contract UmbrellaSpokeBaseTest is Test {
     anotherHub = new MockHub();
     anotherHub.listAsset(ASSET_6_DECIMALS, address(anotherUnderlying6Decimals), 6);
 
-    // a deficit is covered through the `hub`, so `Umbrella` has to be a `spoke` of every covered pair
+    // a deficit is covered through the `hub`, so `Umbrella` has to be a `spoke` of every covered hub asset
     hub.setSpokeListed(ASSET_6_DECIMALS, address(umbrella), true);
     hub.setSpokeListed(ASSET_18_DECIMALS, address(umbrella), true);
     anotherHub.setSpokeListed(ASSET_6_DECIMALS, address(umbrella), true);
@@ -207,6 +208,21 @@ abstract contract UmbrellaSpokeBaseTest is Test {
       address(anotherUnderlying6Decimals),
       1_000_000 * 1e6
     );
+  }
+
+  function _createSpokes() internal {
+    spokeA = _newSpoke();
+    spokeB = _newSpoke();
+  }
+
+  /// @dev Creates a `spoke` with a reserve for every asset of every `hub`, priced like the stake underlyings
+  function _newSpoke() internal returns (address) {
+    MockSpoke spoke = new MockSpoke(ORACLE_PRICE, ORACLE_DECIMALS);
+    spoke.listReserve(address(hub), ASSET_6_DECIMALS);
+    spoke.listReserve(address(hub), ASSET_18_DECIMALS);
+    spoke.listReserve(address(anotherHub), ASSET_6_DECIMALS);
+
+    return address(spoke);
   }
 
   function _seedHubLiquidity(
@@ -223,31 +239,21 @@ abstract contract UmbrellaSpokeBaseTest is Test {
     return address(new MockOracleWithDecimals(price, priceDecimals));
   }
 
-  /// @dev Both oracles quote 1 unit of the asset and 1 unit of the stake underlying at the same price,
+  /// @dev The stake underlying is quoted at the same price as the asset by the `spoke` oracles,
   /// so that the amount slashed matches the deficit covered
-  function _setUpOracles() internal returns (address assetOracle, address stakeUnderlyingOracle) {
-    return (
-      _newOracle(int256(ORACLE_PRICE), ORACLE_DECIMALS),
-      _newOracle(int256(ORACLE_PRICE), ORACLE_DECIMALS)
-    );
-  }
-
   function _slashingConfigs(
     address targetHub,
     uint256 assetId,
     address umbrellaStake,
     uint256 liquidationFee
   ) internal returns (IUmbrellaConfigurationV4.SlashingConfigUpdate[] memory) {
-    (address assetOracle, address stakeUnderlyingOracle) = _setUpOracles();
-
     return
       _slashingConfigs(
         targetHub,
         assetId,
         umbrellaStake,
         liquidationFee,
-        assetOracle,
-        stakeUnderlyingOracle
+        _newOracle(int256(ORACLE_PRICE), ORACLE_DECIMALS)
       );
   }
 
@@ -256,7 +262,6 @@ abstract contract UmbrellaSpokeBaseTest is Test {
     uint256 assetId,
     address umbrellaStake,
     uint256 liquidationFee,
-    address assetOracle,
     address stakeUnderlyingOracle
   ) internal pure returns (IUmbrellaConfigurationV4.SlashingConfigUpdate[] memory configs) {
     configs = new IUmbrellaConfigurationV4.SlashingConfigUpdate[](1);
@@ -265,7 +270,6 @@ abstract contract UmbrellaSpokeBaseTest is Test {
       assetId: assetId,
       umbrellaStake: umbrellaStake,
       liquidationFee: liquidationFee,
-      assetOracle: assetOracle,
       umbrellaStakeUnderlyingOracle: stakeUnderlyingOracle
     });
   }

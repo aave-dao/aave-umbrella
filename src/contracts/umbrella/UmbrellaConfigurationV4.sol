@@ -4,9 +4,14 @@ pragma solidity ^0.8.27;
 import {AggregatorInterface} from 'aave-v3-origin/contracts/dependencies/chainlink/AggregatorInterface.sol';
 
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
+import {IPriceOracle} from 'aave-v4/spoke/interfaces/IPriceOracle.sol';
+import {ISpoke} from 'aave-v4/spoke/interfaces/ISpoke.sol';
+import {SpokeUtils} from 'aave-v4/spoke/libraries/SpokeUtils.sol';
 import {MathUtils} from 'aave-v4/libraries/math/MathUtils.sol';
 import {PercentageMath} from 'aave-v4/libraries/math/PercentageMath.sol';
 import {WadRayMath} from 'aave-v4/libraries/math/WadRayMath.sol';
+
+import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 
 import {EnumerableMap} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableMap.sol';
 import {EnumerableSet} from 'openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol';
@@ -22,7 +27,7 @@ import {UmbrellaBase} from './UmbrellaBase.sol';
  * @notice This abstract contract provides base configuration for covering `spoke`s of an Aave V4 `Hub`,
  * including setting `UmbrellaStakeToken`s, `liquidationFee`s, `underlyingOracle`s for pricing, and tracking deficit.
  * @dev Deficit is tracked per `spoke`, while slashing configurations are shared by every `spoke` covered by a
- * `hub` and `assetId` pair. A single instance can cover several `Hub`s.
+ * hub asset, i.e. an `assetId` of a `hub`. A single instance can cover several `Hub`s.
  * @author BGD labs
  */
 abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfigurationV4 {
@@ -32,11 +37,9 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   using WadRayMath for uint256;
   using {MathUtils.zeroFloorSub} for uint256;
 
-  bytes32 public constant SPOKE_COVERAGE_MANAGER_ROLE = keccak256('SPOKE_COVERAGE_MANAGER_ROLE');
-
   /// @custom:storage-location erc7201:umbrella.storage.UmbrellaConfigurationV4
   struct UmbrellaConfigurationV4Storage {
-    /// @notice Map of `hub` and `assetId` pairs and their data
+    /// @notice Map of hub assets and their data
     mapping(address hub => mapping(uint256 assetId => AssetData)) assetsData;
     /// @notice Map of stake addresses and their data
     mapping(address umbrellaStake => StakeTokenData) stakesData;
@@ -58,13 +61,8 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     }
   }
 
-  function __UmbrellaConfigurationV4_init(
-    address superAdmin,
-    address slashedFundsRecipient
-  ) internal onlyInitializing {
+  function __UmbrellaConfigurationV4_init(address slashedFundsRecipient) internal onlyInitializing {
     require(slashedFundsRecipient != address(0), ZeroAddress());
-
-    _grantRole(SPOKE_COVERAGE_MANAGER_ROLE, superAdmin);
 
     _getUmbrellaConfigurationV4Storage().slashedFundsRecipient = slashedFundsRecipient;
   }
@@ -89,13 +87,6 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
 
       bool configRemoved = assetData.configurationMap.remove(removalPairs[i].umbrellaStake);
       if (configRemoved) {
-        // The `deficitOffset` of a `spoke` is initialized when it is added to the coverage of a configured
-        // pair, so the last configuration of a pair stays until every `spoke` is removed from its coverage
-        require(
-          assetData.configurationMap.length() != 0 || _getCoveredSpokes(assetData).length == 0,
-          SpokesStillCovered()
-        );
-
         // `StakeTokenData` is only flagged as deactivated, so that `underlyingOracle` remains readable
         // and function `latestAnswer` inside `UmbrellaStakeToken` stays workable after config removal
         // This oracle should not be the only source of price and should not be used after removing the config, however, for the full functionality of `UmbrellaStakeToken`, we will leave it
@@ -111,9 +102,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   }
 
   /// @inheritdoc IUmbrellaConfigurationV4
-  function addCoveredSpokes(
-    SpokeCoverage[] calldata spokes
-  ) external onlyRole(SPOKE_COVERAGE_MANAGER_ROLE) {
+  function addCoveredSpokes(SpokeCoverage[] calldata spokes) external onlyRole(DEFAULT_ADMIN_ROLE) {
     for (uint256 i; i < spokes.length; ++i) {
       _addCoveredSpoke(spokes[i]);
     }
@@ -122,7 +111,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   /// @inheritdoc IUmbrellaConfigurationV4
   function removeCoveredSpokes(
     SpokeCoverage[] calldata spokes
-  ) external onlyRole(SPOKE_COVERAGE_MANAGER_ROLE) {
+  ) external onlyRole(DEFAULT_ADMIN_ROLE) {
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
 
     for (uint256 i; i < spokes.length; ++i) {
@@ -147,7 +136,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   ) external view returns (SlashingConfig memory) {
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
     (bool exist, uint256 value) = $.assetsData[hub][assetId].configurationMap.tryGet(umbrellaStake);
-    require(exist, ConfigurationDoesNotExist());
+    require(exist, ConfigurationNotExist());
 
     return
       SlashingConfig({
@@ -312,15 +301,10 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     return _getUmbrellaConfigurationV4Storage().assetsData[hub][assetId].configurationMap.length();
   }
 
-  function _getAssetOracle(address umbrellaStake) internal view returns (address) {
-    return _getUmbrellaConfigurationV4Storage().stakesData[umbrellaStake].assetOracle;
-  }
-
   function _updateSlashingConfig(SlashingConfigUpdate calldata slashConfig) internal {
     require(
       slashConfig.hub != address(0) &&
         slashConfig.umbrellaStake != address(0) &&
-        slashConfig.assetOracle != address(0) &&
         slashConfig.umbrellaStakeUnderlyingOracle != address(0),
       ZeroAddress()
     );
@@ -332,28 +316,31 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     require(_isUmbrellaStkToken(slashConfig.umbrellaStake), InvalidStakeToken());
 
     // one-time safety checks
-    (address underlying, ) = IHub(slashConfig.hub).getAssetUnderlyingAndDecimals(
+    (address underlying, uint8 decimals) = IHub(slashConfig.hub).getAssetUnderlyingAndDecimals(
       slashConfig.assetId
     );
     require(underlying != address(0), InvalidAsset());
+    require(
+      IERC20Metadata(slashConfig.umbrellaStake).decimals() == decimals,
+      InvalidNumberOfDecimals()
+    );
 
     require(
-      AggregatorInterface(slashConfig.assetOracle).latestAnswer() > 0 &&
-        AggregatorInterface(slashConfig.umbrellaStakeUnderlyingOracle).latestAnswer() > 0,
+      AggregatorInterface(slashConfig.umbrellaStakeUnderlyingOracle).latestAnswer() > 0,
       InvalidOraclePrice()
     );
     require(
-      AggregatorInterface(slashConfig.assetOracle).decimals() ==
-        AggregatorInterface(slashConfig.umbrellaStakeUnderlyingOracle).decimals(),
+      AggregatorInterface(slashConfig.umbrellaStakeUnderlyingOracle).decimals() ==
+        SpokeUtils.ORACLE_DECIMALS,
       OracleDecimalsMismatch()
     );
 
     UmbrellaConfigurationV4Storage storage $ = _getUmbrellaConfigurationV4Storage();
 
-    // Using the same `UmbrellaStakeToken` for several different `hub` and `assetId` pairs is prohibited
-    // Cause of this we check the `hub` address of the current pair:
+    // Using the same `UmbrellaStakeToken` for several different hub assets is prohibited
+    // Cause of this we check the `hub` address of the current hub asset:
     // If it's empty, then this stake has never been configured
-    // If `slashConfig.hub` and `slashConfig.assetId` match the current pair, then we are trying to update `slashingConfig`
+    // If `slashConfig.hub` and `slashConfig.assetId` match the current hub asset, then we are trying to update `slashingConfig`
     // `revert` otherwise
     StakeTokenData storage stakeData = $.stakesData[slashConfig.umbrellaStake];
     require(
@@ -362,16 +349,23 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       UmbrellaStakeAlreadySetForAnotherAsset()
     );
 
-    // Unlike the V3 version, the `deficitOffset` is not initialized here, cause it is tracked per `spoke`
-    // and is already initialized whenever a `spoke` is added to the coverage of this pair
-    $.assetsData[slashConfig.hub][slashConfig.assetId].configurationMap.set(
-      slashConfig.umbrellaStake,
-      slashConfig.liquidationFee
-    );
+    AssetData storage assetData = $.assetsData[slashConfig.hub][slashConfig.assetId];
+
+    // When a hub asset is initialized the deficit of each covered `spoke` is set to its `deficitOffset`, as otherwise an immediate slashing could be triggered.
+    // Initialization should happen whenever a first stk is added to the coverage map.
+    // If for some reason, all stake tokens are removed after initialization, then it is fine and correct to re-initialize `deficitOffset` for the same reason during this setup.
+    if (assetData.configurationMap.length() == 0) {
+      address[] memory coveredSpokes = _getCoveredSpokes(assetData);
+
+      for (uint256 i; i < coveredSpokes.length; ++i) {
+        _initDeficitOffset(assetData, slashConfig.hub, slashConfig.assetId, coveredSpokes[i]);
+      }
+    }
+
+    assetData.configurationMap.set(slashConfig.umbrellaStake, slashConfig.liquidationFee);
     $.stakesData[slashConfig.umbrellaStake] = StakeTokenData({
       underlyingOracle: slashConfig.umbrellaStakeUnderlyingOracle,
       deactivated: false,
-      assetOracle: slashConfig.assetOracle,
       hub: slashConfig.hub,
       assetId: slashConfig.assetId.toUint96()
     });
@@ -381,7 +375,6 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
       slashConfig.assetId,
       slashConfig.umbrellaStake,
       slashConfig.liquidationFee,
-      slashConfig.assetOracle,
       slashConfig.umbrellaStakeUnderlyingOracle
     );
   }
@@ -389,40 +382,48 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
   function _addCoveredSpoke(SpokeCoverage calldata coverage) internal {
     require(IHub(coverage.hub).isSpokeListed(coverage.assetId, coverage.spoke), InvalidSpoke());
     // A deficit is eliminated through `Hub.add()` and `Hub.eliminateDeficit()`, so this contract must be
-    // a `spoke` of the pair itself, otherwise a slashed deficit could never be eliminated
+    // a `spoke` of the hub asset itself, otherwise a slashed deficit could never be eliminated
     require(
       IHub(coverage.hub).isSpokeListed(coverage.assetId, address(this)),
       UmbrellaNotListedOnHub()
+    );
+    // The asset is priced by the oracle of the `spoke` when slashing, so it must have a reserve for it
+    ISpoke(coverage.spoke).getReserveId(coverage.hub, coverage.assetId);
+    require(
+      IPriceOracle(ISpoke(coverage.spoke).ORACLE()).decimals() == SpokeUtils.ORACLE_DECIMALS,
+      OracleDecimalsMismatch()
     );
 
     AssetData storage assetData = _getUmbrellaConfigurationV4Storage().assetsData[coverage.hub][
       coverage.assetId
     ];
-
-    // Coverage initializes the `deficitOffset` below, so it can only be added to a configured pair. Otherwise
-    // the deficit reported while the pair had no `SlashingConfig` would become slashable as soon as the
-    // first one is installed.
-    require(assetData.configurationMap.length() != 0, AssetCoverageNotSetup());
-
     SpokeData storage spokeData = assetData.spokesData[coverage.spoke];
 
     if (assetData.listedSpokes.add(coverage.spoke) || spokeData.deactivated) {
       delete spokeData.deactivated;
 
       // The deficit already reported by the `spoke` becomes its `deficitOffset`, as otherwise an immediate slashing could be triggered.
-      // If `pendingDeficit` is not zero for some reason, e.g. the `spoke` is covered again without previous full coverage of its `pendingDeficit`,
-      // then we need to take this value into account to set the new `deficitOffset` here.
-      uint256 spokeDeficit = _getSpokeDeficit(coverage.hub, coverage.assetId, coverage.spoke);
-
-      _setDeficitOffset(
-        coverage.hub,
-        coverage.assetId,
-        coverage.spoke,
-        spokeDeficit.zeroFloorSub(spokeData.pendingDeficit)
-      );
+      // If the hub asset has no `SlashingConfig` yet, the `deficitOffset` is initialized again when the first one is installed.
+      _initDeficitOffset(assetData, coverage.hub, coverage.assetId, coverage.spoke);
 
       emit SpokeCoverageAdded(coverage.hub, coverage.assetId, coverage.spoke);
     }
+  }
+
+  /// @dev Sets the `deficitOffset` of the `spoke` to its current deficit. If `pendingDeficit` is not zero for some reason,
+  /// e.g. the `spoke` is covered again without previous full coverage of its `pendingDeficit`, then this value is taken into account.
+  function _initDeficitOffset(
+    AssetData storage assetData,
+    address hub,
+    uint256 assetId,
+    address spoke
+  ) private {
+    _setDeficitOffset(
+      hub,
+      assetId,
+      spoke,
+      _getSpokeDeficit(hub, assetId, spoke).zeroFloorSub(assetData.spokesData[spoke].pendingDeficit)
+    );
   }
 
   function _setDeficitOffset(
@@ -484,7 +485,7 @@ abstract contract UmbrellaConfigurationV4 is UmbrellaBase, IUmbrellaConfiguratio
     }
 
     // shrink the array to the `spoke`s that are still covered, the deactivated ones are moved past its end
-    assembly {
+    assembly ('memory-safe') {
       mstore(spokes, coveredNumber)
     }
 

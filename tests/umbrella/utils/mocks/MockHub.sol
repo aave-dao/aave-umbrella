@@ -181,6 +181,18 @@ contract MockHub {
     return _listedSpokes[assetId][spoke];
   }
 
+  function previewAddByShares(uint256 assetId, uint256 shares) external view returns (uint256) {
+    Asset storage asset = _assetsData[assetId];
+
+    return shares.toAssetsUp(_totalAddedAssets(asset), asset.addedShares);
+  }
+
+  function previewRemoveByAssets(uint256 assetId, uint256 assets) external view returns (uint256) {
+    Asset storage asset = _assetsData[assetId];
+
+    return assets.toSharesUp(_totalAddedAssets(asset), asset.addedShares);
+  }
+
   function previewRemoveByShares(uint256 assetId, uint256 shares) external view returns (uint256) {
     Asset storage asset = _assetsData[assetId];
 

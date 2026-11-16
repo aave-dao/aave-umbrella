@@ -9,7 +9,12 @@ import {UmbrellaSpokeE2EBaseTest} from './utils/UmbrellaSpokeE2EBase.t.sol';
 
 import {IUmbrellaBase} from '../../src/contracts/umbrella/interfaces/IUmbrellaBase.sol';
 import {IUmbrellaConfigurationV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaConfigurationV4.sol';
+import {IUmbrellaStkManager} from '../../src/contracts/umbrella/interfaces/IUmbrellaStkManager.sol';
 import {IUmbrellaV4} from '../../src/contracts/umbrella/interfaces/IUmbrellaV4.sol';
+
+import {UmbrellaStakeToken} from '../../src/contracts/stakeToken/UmbrellaStakeToken.sol';
+
+import {MockOracleWithDecimals} from '../umbrella/utils/mocks/MockOracleWithDecimals.sol';
 
 contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
   /// @dev The whole lifecycle against a real `Hub`: a `spoke` writes off drawn liquidity, `Umbrella` takes
@@ -128,7 +133,7 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     uint256 offset = umbrella.getDeficitOffset(address(hub), assetId, address(secondSpoke));
     assertEq(offset, deficit);
 
-    _fundCoverageManager(deficit);
+    _fundCoverageManager(deficit + 2);
 
     vm.prank(defaultAdmin);
     uint256 covered = umbrella.coverDeficitOffset(
@@ -138,17 +143,68 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
       deficit
     );
 
-    // the elimination is sized from the shares received, so it never needs more of them than the
-    // coverage just added, at the price of leaving up to a couple of wei of the deficit standing
-    assertLe(covered, deficit);
-    assertGe(covered, deficit - 2);
+    // the coverage pulls the assets worth the shares the elimination burns, so the whole deficit is
+    // eliminated at the price of up to a couple of wei more paid by the caller
+    assertEq(covered, deficit);
 
-    assertEq(_spokeDeficit(address(secondSpoke)), deficit - covered);
-    assertEq(
-      umbrella.getDeficitOffset(address(hub), assetId, address(secondSpoke)),
-      offset - covered
-    );
+    assertEq(_spokeDeficit(address(secondSpoke)), 0);
+    assertEq(umbrella.getDeficitOffset(address(hub), assetId, address(secondSpoke)), 0);
     assertEq(underlying.balanceOf(address(umbrella)), 0);
+  }
+
+  /// @dev With appreciated shares, `add()` of a single wei mints no share, so the last wei must still be coverable
+  function test_e2e_coverLastWeiOfPendingDeficitWithAppreciatedShares() public {
+    lendingSpoke.draw(assetId, 500_000 * 1e6, borrower);
+    vm.warp(block.timestamp + 365 days);
+
+    _coverSpoke(address(secondSpoke));
+    _fillStake(10_000 * 1e6);
+    _reportDeficit(secondSpoke, 1_000 * 1e6);
+
+    uint256 slashed = umbrella.slash(address(hub), assetId, address(secondSpoke));
+    _fundCoverageManager(slashed + 4);
+
+    vm.startPrank(defaultAdmin);
+    umbrella.coverPendingDeficit(address(hub), assetId, address(secondSpoke), slashed - 1);
+    uint256 covered = umbrella.coverPendingDeficit(address(hub), assetId, address(secondSpoke), 1);
+    vm.stopPrank();
+
+    assertEq(covered, 1);
+    assertEq(umbrella.getPendingDeficit(address(hub), assetId, address(secondSpoke)), 0);
+    assertEq(_spokeDeficit(address(secondSpoke)), 0);
+  }
+
+  /// @dev As in V3, replacing a `UmbrellaStakeToken` by removing the old configuration first re-initializes the
+  /// `deficitOffset`, so the new stakers are not slashed for a deficit the old ones did not cover
+  function test_e2e_replaceStakeTokenDoesNotSlashNewStakersForOldDeficit() public {
+    _coverSpoke(address(lendingSpoke));
+    // the old stake is empty, so nothing of this deficit can be slashed from it
+    _reportDeficit(lendingSpoke, 1_000 * 1e6);
+
+    vm.prank(defaultAdmin);
+    umbrella.removeSlashingConfigs(_removalPairs());
+
+    IUmbrellaStkManager.StakeTokenSetup[]
+      memory stakeSetups = new IUmbrellaStkManager.StakeTokenSetup[](1);
+    stakeSetups[0] = IUmbrellaStkManager.StakeTokenSetup({
+      underlying: address(underlying),
+      cooldown: 2 weeks,
+      unstakeWindow: 2 days,
+      suffix: 'v2'
+    });
+
+    vm.prank(defaultAdmin);
+    stakeToken = UmbrellaStakeToken(umbrella.createStakeTokens(stakeSetups)[0]);
+    _configureCoverage();
+    _fillStake(10_000 * 1e6);
+
+    (bool slashable, uint256 newDeficit) = umbrella.isSpokeSlashable(
+      address(hub),
+      assetId,
+      address(lendingSpoke)
+    );
+    assertFalse(slashable);
+    assertEq(newDeficit, 0);
   }
 
   /// @dev Funds are only left behind when the deficit `Umbrella` tracks outlives the one on the `hub`,
@@ -214,37 +270,23 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     assertEq(_spokeDeficit(address(secondSpoke)), 0);
   }
 
-  /// @dev A covered `spoke` never outlives the configuration of its pair, so the deficit reported while the
-  /// coverage was decommissioned cannot be slashed once a `SlashingConfig` is installed again
+  /// @dev As in V3, the deficit reported while the hub asset had no `SlashingConfig` cannot be slashed once one is installed again,
+  /// whatever the order in which the coverage of the `spoke` and the configuration of the hub asset are handled
   function test_e2e_decommissionedCoverageDoesNotSlashTheDeficitItMissed() public {
     _coverSpoke(address(lendingSpoke));
 
-    // the last configuration cannot be dropped while a `spoke` is still listed in the coverage
-    vm.expectRevert(abi.encodeWithSelector(IUmbrellaConfigurationV4.SpokesStillCovered.selector));
+    // the last configuration can be dropped while the `spoke` is still covered
     vm.prank(defaultAdmin);
     umbrella.removeSlashingConfigs(_removalPairs());
 
-    _uncoverSpoke(address(lendingSpoke));
-
-    vm.prank(defaultAdmin);
-    umbrella.removeSlashingConfigs(_removalPairs());
-
-    // the deficit reported while nothing was covered
+    // the deficit reported while nothing was configured
     _reportDeficit(lendingSpoke, 1_000 * 1e6);
     uint256 missedDeficit = _spokeDeficit(address(lendingSpoke));
     assertGt(missedDeficit, 0);
 
-    // re-listing the `spoke` requires the pair to be configured first
-    vm.expectRevert(
-      abi.encodeWithSelector(IUmbrellaConfigurationV4.AssetCoverageNotSetup.selector)
-    );
-    vm.prank(defaultAdmin);
-    umbrella.addCoveredSpokes(_coverages(address(lendingSpoke)));
-
     _configureCoverage();
-    _coverSpoke(address(lendingSpoke));
 
-    // and it takes over the missed deficit as its `deficitOffset`, so nothing of it is slashable
+    // the `spoke` takes over the missed deficit as its `deficitOffset`, so nothing of it is slashable
     assertEq(
       umbrella.getDeficitOffset(address(hub), assetId, address(lendingSpoke)),
       missedDeficit
@@ -268,6 +310,26 @@ contract UmbrellaSpoke_E2E_Test is UmbrellaSpokeE2EBaseTest {
     );
     assertTrue(slashable);
     assertEq(newDeficit, _spokeDeficit(address(lendingSpoke)) - missedDeficit);
+  }
+
+  /// @dev As in V3 with the `Pool` oracle, the asset is priced by the `AaveOracle` of the slashed `spoke`
+  function test_e2e_slashUsesTheOracleOfTheSpoke() public {
+    _coverSpoke(address(lendingSpoke));
+    _fillStake(10_000 * 1e6);
+
+    lendingSpoke.setReserveSource(
+      assetId,
+      address(new MockOracleWithDecimals(int256(ORACLE_PRICE) * 2, ORACLE_DECIMALS))
+    );
+
+    _reportDeficit(lendingSpoke, 1_000 * 1e6);
+    uint256 deficit = _spokeDeficit(address(lendingSpoke));
+
+    uint256 covered = umbrella.slash(address(hub), assetId, address(lendingSpoke));
+
+    assertEq(covered, deficit);
+    // the asset is worth twice the stake underlying for this `spoke`, so twice as much of it is slashed
+    assertEq(underlying.balanceOf(collector), deficit * 2);
   }
 
   function test_e2e_slashableDeficitAcrossSpokes() public {

@@ -17,3 +17,18 @@ permissions:
 jobs:
   test:
     uses: aave-dao/github-workflows/.github/workflows/foundry-test.yml@main
+
+  e2e:
+    name: Aave V4 e2e tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: aave-dao/github-workflows/.github/actions/foundry-setup@main
+
+      - name: Run e2e tests
+        run: forge test --match-path 'tests/e2e/*'
+        env:
+          FOUNDRY_PROFILE: e2e

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IPool} from 'aave-v3-origin/contracts/interfaces/IPool.sol';
 
-import {IUmbrella} from '../../umbrella/interfaces/IUmbrella.sol';
+import {IUmbrellaV3} from '../../umbrella/interfaces/IUmbrellaV3.sol';
 
 interface IDeficitOffsetClinicSteward {
   /**
@@ -63,7 +63,7 @@ interface IDeficitOffsetClinicSteward {
    * @notice Returns the `Umbrella` contract for which this steward instance is configured.
    * @return Umbrella address
    */
-  function UMBRELLA() external view returns (IUmbrella);
+  function UMBRELLA() external view returns (IUmbrellaV3);
 
   /**
    * @notice Returns the Aave Collector from where the funds are pulled.

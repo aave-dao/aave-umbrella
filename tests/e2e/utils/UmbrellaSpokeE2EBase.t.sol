@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import 'forge-std/Test.sol';
 
 import {AccessManager} from 'aave-v4/dependencies/openzeppelin/AccessManager.sol';
+import {AaveOracle} from 'aave-v4/spoke/AaveOracle.sol';
 import {AssetInterestRateStrategy, IAssetInterestRateStrategy} from 'aave-v4/hub/AssetInterestRateStrategy.sol';
 import {HubInstance} from 'aave-v4/hub/instances/HubInstance.sol';
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
@@ -160,13 +161,24 @@ abstract contract UmbrellaSpokeE2EBaseTest is Test {
   }
 
   function _registerSpokes() internal {
-    lendingSpoke = new TestSpoke(hub);
-    secondSpoke = new TestSpoke(hub);
+    lendingSpoke = _newSpoke();
+    secondSpoke = _newSpoke();
 
     // the fee receiver is registered as a spoke by `addAsset` itself
     _addSpoke(address(lendingSpoke));
     _addSpoke(address(secondSpoke));
     _addSpoke(address(umbrella));
+  }
+
+  /// @dev Each `spoke` has its own `AaveOracle`, pricing the asset at `ORACLE_PRICE` like the stake underlying
+  function _newSpoke() internal returns (TestSpoke spoke) {
+    AaveOracle oracle = new AaveOracle(ORACLE_DECIMALS);
+    spoke = new TestSpoke(hub, address(oracle));
+    oracle.setSpoke(address(spoke));
+    spoke.setReserveSource(
+      assetId,
+      address(new MockOracleWithDecimals(int256(ORACLE_PRICE), ORACLE_DECIMALS))
+    );
   }
 
   function _addSpoke(address spoke) internal {
@@ -192,7 +204,6 @@ abstract contract UmbrellaSpokeE2EBaseTest is Test {
       assetId: assetId,
       umbrellaStake: address(stakeToken),
       liquidationFee: 0,
-      assetOracle: address(new MockOracleWithDecimals(int256(ORACLE_PRICE), ORACLE_DECIMALS)),
       umbrellaStakeUnderlyingOracle: address(
         new MockOracleWithDecimals(int256(ORACLE_PRICE), ORACLE_DECIMALS)
       )

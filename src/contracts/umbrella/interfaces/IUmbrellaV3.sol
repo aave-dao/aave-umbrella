@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {IUmbrellaConfiguration} from './IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationV3} from './IUmbrellaConfigurationV3.sol';
 import {IUmbrellaBase} from './IUmbrellaBase.sol';
 
-interface IUmbrella is IUmbrellaConfiguration, IUmbrellaBase {
+interface IUmbrellaV3 is IUmbrellaConfigurationV3, IUmbrellaBase {
   /**
    * @notice Event is emitted whenever the `deficitOffset` is covered on some amount.
    * @param reserve Reserve which `deficitOffset` is covered
