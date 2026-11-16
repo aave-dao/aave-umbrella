@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IUmbrellaEngineStructs as IStructs} from '../IUmbrellaEngineStructs.sol';
-import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfiguration as ICStructs} from '../IUmbrellaEngineStructs.sol';
+import {IUmbrellaStkManager as ISMStructs, IUmbrellaConfigurationV3 as ICStructs} from '../IUmbrellaEngineStructs.sol';
 
 /**
  * @title IUmbrellaConfigEngine interface

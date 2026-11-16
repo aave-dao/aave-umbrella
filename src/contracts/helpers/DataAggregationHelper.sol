@@ -14,11 +14,11 @@ import {IStataTokenV2} from 'aave-v3-origin/contracts/extensions/stata-token/int
 import {IAaveOracle} from 'aave-v3-origin/contracts/interfaces/IAaveOracle.sol';
 import {IAToken} from 'aave-v3-origin/contracts/interfaces/IAToken.sol';
 
-import {IUmbrellaConfiguration} from '../umbrella/interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationV3} from '../umbrella/interfaces/IUmbrellaConfigurationV3.sol';
 import {IUmbrellaStakeToken} from '../stakeToken/interfaces/IUmbrellaStakeToken.sol';
 import {IRewardsController} from '../rewards/interfaces/IRewardsController.sol';
 import {IStakeToken} from '../stakeToken/interfaces/IStakeToken.sol';
-import {IUmbrella} from '../umbrella/interfaces/IUmbrella.sol';
+import {IUmbrellaV3} from '../umbrella/interfaces/IUmbrellaV3.sol';
 
 /**
  * @title DataAggregationHelper
@@ -98,7 +98,7 @@ contract DataAggregationHelper is Ownable, Rescuable {
   }
 
   function getAllAggregatedData(
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     IAaveOracle aaveOracle,
     address user
   )
@@ -111,7 +111,7 @@ contract DataAggregationHelper is Ownable, Rescuable {
       TokenRouteBalances[] memory
     )
   {
-    address[] memory stakeTokens = IUmbrella(umbrella).getStkTokens();
+    address[] memory stakeTokens = IUmbrellaV3(umbrella).getStkTokens();
 
     StakeTokenData[] memory tokenData = _getTokenAggregatedData(stakeTokens, umbrella, aaveOracle);
     TokenRouteData[] memory tokenRouteData = _getTokensRouteData(stakeTokens, aaveOracle);
@@ -128,37 +128,37 @@ contract DataAggregationHelper is Ownable, Rescuable {
   }
 
   function getTokensAggregatedData(
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     IAaveOracle aaveOracle
   ) external view returns (StakeTokenData[] memory) {
-    address[] memory stakeTokens = IUmbrella(umbrella).getStkTokens();
+    address[] memory stakeTokens = IUmbrellaV3(umbrella).getStkTokens();
 
     return _getTokenAggregatedData(stakeTokens, umbrella, aaveOracle);
   }
 
   function getTokensRouteData(
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     IAaveOracle aaveOracle
   ) external view returns (TokenRouteData[] memory) {
-    address[] memory stakeTokens = IUmbrella(umbrella).getStkTokens();
+    address[] memory stakeTokens = IUmbrellaV3(umbrella).getStkTokens();
 
     return _getTokensRouteData(stakeTokens, aaveOracle);
   }
 
   function getUserAggregatedData(
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     address user
   ) external view returns (StakeTokenUserData[] memory) {
-    address[] memory stakeTokens = IUmbrella(umbrella).getStkTokens();
+    address[] memory stakeTokens = IUmbrellaV3(umbrella).getStkTokens();
 
     return _getUserAggregatedData(stakeTokens, user);
   }
 
   function getUserBalancesFromRouteTokens(
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     address user
   ) external view returns (TokenRouteBalances[] memory) {
-    address[] memory stakeTokens = IUmbrella(umbrella).getStkTokens();
+    address[] memory stakeTokens = IUmbrellaV3(umbrella).getStkTokens();
 
     return _getUserBalancesFromRouteTokens(stakeTokens, user);
   }
@@ -175,11 +175,11 @@ contract DataAggregationHelper is Ownable, Rescuable {
 
   function _getTokenAggregatedData(
     address[] memory stakeTokens,
-    IUmbrella umbrella,
+    IUmbrellaV3 umbrella,
     IAaveOracle aaveOracle
   ) internal view returns (StakeTokenData[] memory) {
     StakeTokenData[] memory stakeTokensData = new StakeTokenData[](stakeTokens.length);
-    IUmbrellaConfiguration.StakeTokenData memory stakeConfig;
+    IUmbrellaConfigurationV3.StakeTokenData memory stakeConfig;
 
     for (uint256 i; i < stakeTokens.length; ++i) {
       stakeConfig = umbrella.getStakeTokenData(stakeTokens[i]);

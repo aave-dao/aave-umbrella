@@ -13,6 +13,18 @@ solc_version = '0.8.27'
 evm_version = 'shanghai'
 bytecode_hash = 'none'
 ffi = true
+# forge >=1.8 turns this on by default, which resolves `new Contract()` by file name only:
+# our RewardsController/RewardsDistributor then clash with the aave-v3-origin ones
+dynamic_test_linking = false
+# the e2e tests build against the Aave V4 contracts, which pin a newer solc than production does
+skip = ['tests/e2e/**']
+
+# `FOUNDRY_PROFILE=e2e forge test` runs the Aave V4 end to end tests. Kept out of the default profile,
+# so that the production contracts stay pinned to the compiler they are deployed with.
+[profile.e2e]
+skip = []
+solc_version = '0.8.28'
+evm_version = 'cancun'
 
 
 [fuzz]

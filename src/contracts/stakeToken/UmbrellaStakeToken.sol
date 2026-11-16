@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 
 import {IRewardsController} from '../rewards/interfaces/IRewardsController.sol';
-import {IUmbrellaConfiguration} from '../umbrella/interfaces/IUmbrellaConfiguration.sol';
+import {IUmbrellaConfigurationBase} from '../umbrella/interfaces/IUmbrellaConfigurationBase.sol';
 
 import {IOracleToken} from './interfaces/IOracleToken.sol';
 import {StakeToken} from './StakeToken.sol';
@@ -37,7 +37,7 @@ contract UmbrellaStakeToken is StakeToken, IOracleToken {
     // The `underlyingPrice` is obtained from an oracle located in `Umbrella`,
     // and the `StakeToken`'s `Owner` is always `Umbrella`, ensuring the call is routed through it.
     uint256 underlyingPrice = uint256(
-      IUmbrellaConfiguration(owner()).latestUnderlyingAnswer(address(this))
+      IUmbrellaConfigurationBase(owner()).latestUnderlyingAnswer(address(this))
     );
 
     // price of `StakeToken` should be always less or equal than price of underlying
